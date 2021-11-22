@@ -1,0 +1,8 @@
+memory_initialization_radix		=	16;
+memory_initialization_vector	=	
+55,55,55,55,55,55,55,d5,
+ff,ff,ff,ff,ff,ff,00,1b,
+21,35,28,9f,08,06,00,01,
+08,00,06,04,00,01,00,1b,
+21,35,28,9f,c0,a8,00,77,
+00,00,00,00,00,00,c0,a8;
