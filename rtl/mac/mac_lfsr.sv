@@ -27,6 +27,7 @@
         input                       clk,
         input                       rst,
         input   [DATA_WIDTH-1 : 0]  data_in,
+        input                       data_valid_in,
         output  [DATA_WIDTH-1 : 0]  data_out,
         input   [LFSR_WIDTH-1 : 0]  lfsr_initial_state_in,
         output  [LFSR_WIDTH-1 : 0]  lfsr_state_out
@@ -177,7 +178,7 @@
      if(rst) begin
         lfsr_state_in_reg  <= lfsr_initial_state_in;
      end else begin
-        lfsr_state_in_reg  <= lfsr_state_reg;
+        lfsr_state_in_reg  <= data_valid_in ? lfsr_state_reg : lfsr_state_in_reg;
      end
  end
 
