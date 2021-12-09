@@ -41,24 +41,24 @@ module eth_top #(
         output              rgmii_tx_ctl_out,
 
         output              mdio_clk_out,
-        output              mdio_rstn_out,  
+        output              mdio_rstn_out
     //  The following ports are the internal GMII connections from IOB logic to mac
 
-        input               phy_tx_clk,
-        input   [7:0]       phy_txd_in,
-        input               phy_tvalid_in,
-        output              phy_tready_out,
-        input               phy_terr_in,        //  user port
-
-//      output              phy_rx_clk,
-        output  [7:0]       phy_rxd_out,
-        output              phy_rvalid_out,
-        input               phy_rready_in,
-        output              phy_rerr_out        //  user port       
 );
 
         wire                clk_locked;
-                
+
+        wire              phy_tx_clk;
+   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_txd_in;
+   (* MARK_DEBUG="true" *)       wire              phy_tvalid_in;
+   (* MARK_DEBUG="true" *)       wire              phy_tready_out;
+   (* MARK_DEBUG="true" *)       wire              phy_terr_in;        //  user port
+
+//   (* MARK_DEBUG="true" *)      wire              phy_rx_clk;
+   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_rxd_out;
+   (* MARK_DEBUG="true" *)       wire              phy_rvalid_out;
+   (* MARK_DEBUG="true" *)       wire              phy_rready_in;
+   (* MARK_DEBUG="true" *)       wire              phy_rerr_out;        //  user port                    
 /*------------------------------------------------------------------------------
 --  clock generate
 ------------------------------------------------------------------------------*/
