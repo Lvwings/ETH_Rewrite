@@ -105,11 +105,15 @@
         end
     end
 
+    reg [1:0]   rx_cnt  =   '0;
     always_ff @(posedge phy_rx_clk) begin 
         if(phy_rx_rst) begin
             data_cnt <= 0;
         end else begin
-            data_cnt <= data_cnt + 1;
+            if (data_cnt == 90)
+                data_cnt <= 0;
+            else
+                data_cnt <= data_cnt + 1;
 
             if (data_cnt >= 10 && data_cnt < 10 + DATA_LENGTH) begin
                 phy_rxd_in      <=  data_ram[data_cnt - 10];
@@ -119,6 +123,10 @@
                 phy_rxd_in      <=  8'hDD;
                 phy_rvalid_in   <=  0;
             end
+
+            rx_cnt  <=  rx_cnt + (data_cnt == 90);
+
+            phy_rerr_in <= (data_cnt == 50) && (rx_cnt == 1);
         end
     end
 

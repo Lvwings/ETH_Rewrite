@@ -13,11 +13,15 @@
      // width of LFSR
     parameter LFSR_WIDTH = 32,
     // LFSR polynomial
-    parameter LFSR_POLY = 32'h10000001,
+    parameter LFSR_POLY = 32'h04C11DB7,
     // LFSR configuration: "GALOIS", "FIBONACCI"
-    parameter LFSR_CONFIG = "FIBONACCI",
+    parameter LFSR_CONFIG = "GALOIS",
     // LFSR feed forward enable
     parameter LFSR_FEED_FORWARD = 0,
+    // LFSR initial state
+    parameter LFSR_INITIAL_STATE = 32'hFFFFFFFF,
+    // LFSR output xor state
+    parameter LFSR_STATE_OUT_XOR = 32'hFFFFFFFF,
     // bit-reverse input and output
     parameter REVERSE = 0,
     // width of data input
@@ -29,9 +33,67 @@
         input   [DATA_WIDTH-1 : 0]  data_in,
         input                       data_valid_in,
         output  [DATA_WIDTH-1 : 0]  data_out,
-        input   [LFSR_WIDTH-1 : 0]  lfsr_initial_state_in,
-        output  [LFSR_WIDTH-1 : 0]  lfsr_state_out
+        output  [LFSR_WIDTH-1 : 0]  lfsr_state_out_comb,
+        output  [LFSR_WIDTH-1 : 0]  lfsr_state_out_reg
  );
+ /*------------------------------------------------------------------------------
+ --  
+ LFSR_CONFIG
+
+Specify the LFSR configuration, either Fibonacci or Galois.  
+
+- Fibonacci is generally used for linear-feedback shift registers (LFSR) 
+for pseudorandom binary sequence (PRBS) generators, scramblers, and descrambers.
+
+- while Galois is generally used for cyclic redundancy check generators and checkers.
+
+Fibonacci style (example for 64b66b scrambler, 0x8000000001)
+
+   DIN (LSB first)
+    |
+    V
+   (+)<---------------------------(+)<-----------------------------.
+    |                              ^                               |
+    |  .----.  .----.       .----. |  .----.       .----.  .----.  |
+    +->|  0 |->|  1 |->...->| 38 |-+->| 39 |->...->| 56 |->| 57 |--'
+    |  '----'  '----'       '----'    '----'       '----'  '----'
+    V
+   DOUT
+
+Galois style (example for CRC16, 0x8005)
+
+    ,-------------------+-------------------------+----------(+)<-- DIN (MSB first)
+    |                   |                         |           ^
+    |  .----.  .----.   V   .----.       .----.   V   .----.  |
+    `->|  0 |->|  1 |->(+)->|  2 |->...->| 14 |->(+)->| 15 |--+---> DOUT
+       '----'  '----'       '----'       '----'       '----'
+
+LFSR_FEED_FORWARD
+
+Generate feed forward instead of feed back LFSR.  Enable this for PRBS checking and 
+self-synchronous descrambling.
+
+Fibonacci feed-forward style (example for 64b66b descrambler, 0x8000000001)
+
+   DIN (LSB first)
+    |
+    |  .----.  .----.       .----.    .----.       .----.  .----.
+    +->|  0 |->|  1 |->...->| 38 |-+->| 39 |->...->| 56 |->| 57 |--.
+    |  '----'  '----'       '----' |  '----'       '----'  '----'  |
+    |                              V                               |
+   (+)<---------------------------(+)------------------------------'
+    |
+    V
+   DOUT
+
+Galois feed-forward style
+
+    ,-------------------+-------------------------+------------+--- DIN (MSB first)
+    |                   |                         |            |
+    |  .----.  .----.   V   .----.       .----.   V   .----.   V
+    `->|  0 |->|  1 |->(+)->|  2 |->...->| 14 |->(+)->| 15 |->(+)-> DOUT
+       '----'  '----'       '----'       '----'       '----'
+ ------------------------------------------------------------------------------*/
  
 
  /*------------------------------------------------------------------------------
@@ -152,37 +214,40 @@
  integer m,n;
 
  always_comb begin 
-    for (m = 0; m < LFSR_WIDTH; m = m+1) begin
-        lfsr_state_reg[m]   =   0;
+    if (data_valid_in) begin
+        for (m = 0; m < LFSR_WIDTH; m = m+1) begin
+            lfsr_state_reg[m]   =   0;
 
-        //  XOR state_in
-        for (n = 0; n < LFSR_WIDTH; n = n+1) begin
-            if (state_matrix[m][n]) begin
-                lfsr_state_reg[m]   =   lfsr_state_reg[m] ^ lfsr_state_in_reg[n];
+            //  XOR state_in
+            for (n = 0; n < LFSR_WIDTH; n = n+1) begin
+                if (state_matrix[m][n]) begin
+                    lfsr_state_reg[m]   =   lfsr_state_reg[m] ^ lfsr_state_in_reg[n];
+                end
             end
-        end
 
-        //  XOR data_in
-        for (n = 0; n < DATA_WIDTH; n = n+1) begin
-            if (data_matrix[m][n]) begin
-                lfsr_state_reg[m]   =   lfsr_state_reg[m] ^ data_in[n];
+            //  XOR data_in
+            for (n = 0; n < DATA_WIDTH; n = n+1) begin
+                if (data_matrix[m][n]) begin
+                    lfsr_state_reg[m]   =   lfsr_state_reg[m] ^ data_in[n];
+                end
             end
         end
     end
  end
 
 /*------------------------------------------------------------------------------
---  output logic
+--  output logic 
+    state out xor specific LFSR_STATE_OUT_XOR according to different application scences
 ------------------------------------------------------------------------------*/
  always_ff @(posedge clk) begin
      if(rst) begin
-        lfsr_state_in_reg  <= lfsr_initial_state_in;
+        lfsr_state_in_reg  <= LFSR_INITIAL_STATE;
      end else begin
         lfsr_state_in_reg  <= data_valid_in ? lfsr_state_reg : lfsr_state_in_reg;
      end
  end
 
- assign lfsr_state_out = lfsr_state_reg;
-
+ assign lfsr_state_out_reg  = lfsr_state_in_reg ^ LFSR_STATE_OUT_XOR[LFSR_WIDTH-1 : 0];
+ assign lfsr_state_out_comb = lfsr_state_reg ^ LFSR_STATE_OUT_XOR[LFSR_WIDTH-1 : 0];
 
  endmodule : mac_lfsr
