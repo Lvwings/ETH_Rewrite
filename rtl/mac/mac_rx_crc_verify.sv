@@ -18,15 +18,13 @@
     input               phy_rx_clk,
     input   [7:0]       phy_rxd_in,
     input               phy_rvalid_in,
-//    output              phy_rready_out,
-    input               phy_rerr_in,        //  user port 
+    input               phy_rerr_in,        
     
     //  mac data out
     output  [7:0]       mac_rdata_out,
     output              mac_rvalid_out,
     input               mac_rready_in,
-    output              mac_rlast_out,
-    output              mac_ruser_out
+    output              mac_rlast_out
 
  );
 /*------------------------------------------------------------------------------
@@ -78,14 +76,14 @@
 /*------------------------------------------------------------------------------
 --  crc state parameter
 ------------------------------------------------------------------------------*/
-    typedef enum    reg [0:0]   {IDLE,CRC}    state_t;
-    state_t crc_state,crc_next_state;
+    typedef enum    reg [0:0]   {IDLE,CRC}    state_r;
+    state_r rcrc_state,rcrc_next_state;
 
     always_ff @(posedge phy_rx_clk) begin 
         if(phy_rx_rst) begin
-            crc_state <= IDLE;
+            rcrc_state <= IDLE;
         end else begin
-            crc_state <= crc_next_state;
+            rcrc_state <= rcrc_next_state;
         end
     end
 
@@ -101,7 +99,7 @@
 
     always_ff @(posedge phy_rx_clk) begin 
         phy_rvalid_d1   <= phy_rvalid_in;
-        case (crc_next_state)
+        case (rcrc_next_state)
             CRC     : begin
                     crc_valid <= phy_rvalid_d1 && phy_rvalid_d5;
                     crc_data  <= phy_rxd_d5;   
@@ -124,7 +122,7 @@
             .LFSR_STATE_OUT_XOR (32'hFFFFFFFF),
             .REVERSE            (1),
             .DATA_WIDTH         (8)
-        ) inst_mac_lfsr (
+        ) inst_mac_rx_crc (
             .clk                   (phy_rx_clk),
             .rst                   (crc_rst),
             .data_in               (crc_data),
@@ -142,7 +140,7 @@
 
     always_ff @(posedge phy_rx_clk) begin 
 
-        case (crc_next_state)
+        case (rcrc_next_state)
             CRC     : begin
                 phy_rx_crc  <=  phy_rvalid_in ? {phy_rxd_in,phy_rx_crc[31:8]} : phy_rx_crc;
 
@@ -186,15 +184,15 @@
 ------------------------------------------------------------------------------*/
 
     always_comb begin 
-        case (crc_state)
-            IDLE    :   crc_next_state = trig_crc_start ? CRC : IDLE;
+        case (rcrc_state)
+            IDLE    :   rcrc_next_state = trig_crc_start ? CRC : IDLE;
 
             CRC     :   if (trig_crc_reset || flag_good_crc)
-                            crc_next_state = IDLE;
+                            rcrc_next_state = IDLE;
                         else
-                            crc_next_state = CRC;
+                            rcrc_next_state = CRC;
 
-            default :   crc_next_state = IDLE;
+            default :   rcrc_next_state = IDLE;
         endcase    
     end
 
