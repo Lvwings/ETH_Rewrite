@@ -43,7 +43,7 @@
     logic       mac_last_out;
     logic       mac_user_out;
 
-    mac_crc_verify inst_mac_crc_verify
+    mac_rx_crc_verify inst_mac_crc_verify
         (
             .logic_clk     (logic_clk),
             .logic_rst     (logic_rst),

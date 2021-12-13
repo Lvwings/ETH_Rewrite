@@ -9,7 +9,7 @@
  Language   : Verilog 2001
  -----------------------------------------------------------------------------*/
 
- module mac_crc_verify 
+ module mac_rx_crc_verify 
     (
     input               logic_clk,
     input               logic_rst,
@@ -22,11 +22,11 @@
     input               phy_rerr_in,        //  user port 
     
     //  mac data out
-    output  [7:0]       mac_data_out,
-    output              mac_valid_out,
-    input               mac_ready_in,
-    output              mac_last_out,
-    output              mac_user_out
+    output  [7:0]       mac_rdata_out,
+    output              mac_rvalid_out,
+    input               mac_rready_in,
+    output              mac_rlast_out,
+    output              mac_ruser_out
 
  );
 /*------------------------------------------------------------------------------
@@ -214,10 +214,10 @@
   .s_axis_tlast     (crc_last),         // input wire s_axis_tlast
 
   .m_axis_aclk      (logic_clk),        // input wire m_axis_aclk
-  .m_axis_tvalid    (mac_valid_out),    // output wire m_axis_tvalid
-  .m_axis_tready    (mac_ready_in),     // input wire m_axis_tready
-  .m_axis_tdata     (mac_data_out),     // output wire [7 : 0] m_axis_tdata
-  .m_axis_tlast     (mac_last_out)      // output wire m_axis_tlast
+  .m_axis_tvalid    (mac_rvalid_out),    // output wire m_axis_tvalid
+  .m_axis_tready    (mac_rready_in),     // input wire m_axis_tready
+  .m_axis_tdata     (mac_rdata_out),     // output wire [7 : 0] m_axis_tdata
+  .m_axis_tlast     (mac_rlast_out)      // output wire m_axis_tlast
 );  
 
  endmodule : mac_crc_verify
