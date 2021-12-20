@@ -16,7 +16,7 @@ module eth_top #(
         // XILINX IODDR style ("IODDR", "IODDR2")
         // Use IODDR for Virtex-4, Virtex-5, Virtex-6, 7 Series, Ultrascale
         // Use IODDR2 for Spartan-6 or lower vision
-        parameter IODDR_STYLE = "IODDR", 
+        parameter IODDR_STYLE       = "IODDR", 
         // Clock input style ("BUFG", "BUFR", "BUFIO")
         // Use BUFR for Virtex-6, 7-series
         // Use BUFG for Virtex-5, Spartan-6, Ultrascale
@@ -24,7 +24,9 @@ module eth_top #(
         // IDELAY tap option : ("Training","Fixed")  
         // Use Training to find the range of valid tap
         // Use Fixed to fix the tap
-        parameter IDELAY_TAP_OPTION = "Fixed"           
+        parameter IDELAY_TAP_OPTION = "Fixed" ,
+        parameter LOCAL_IP          =   32'hC0A8_006E,
+        parameter LOCAL_MAC         =   48'hABCD_1234_5678                  
     )                                                   
     (
         input               extern_clk_in,      // Clock
@@ -49,16 +51,16 @@ module eth_top #(
         wire                clk_locked;
 
         wire              phy_tx_clk;
-   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_txd_in;
-   (* MARK_DEBUG="true" *)       wire              phy_tvalid_in;
-   (* MARK_DEBUG="true" *)       wire              phy_tready_out;
-   (* MARK_DEBUG="true" *)       wire              phy_terr_in;        //  user port
+   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_txd;
+   (* MARK_DEBUG="true" *)       wire              phy_tvalid;
+   (* MARK_DEBUG="true" *)       wire              phy_tready;
+   (* MARK_DEBUG="true" *)       wire              phy_terr;        //  user port
 
 //   (* MARK_DEBUG="true" *)      wire              phy_rx_clk;
-   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_rxd_out;
-   (* MARK_DEBUG="true" *)       wire              phy_rvalid_out;
-   (* MARK_DEBUG="true" *)       wire              phy_rready_in;
-   (* MARK_DEBUG="true" *)       wire              phy_rerr_out;        //  user port                    
+   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_rxd;
+   (* MARK_DEBUG="true" *)       wire              phy_rvalid;
+   (* MARK_DEBUG="true" *)       wire              phy_rready;
+   (* MARK_DEBUG="true" *)       wire              phy_rerr;        //  user port                    
 /*------------------------------------------------------------------------------
 --  clock generate
 ------------------------------------------------------------------------------*/
@@ -75,9 +77,6 @@ module eth_top #(
    // Clock in ports
     .clk_in(extern_clk_in));      // input clk_in
 
-
-
-   
 /*------------------------------------------------------------------------------
 --  phy logic
 ------------------------------------------------------------------------------*/   
@@ -98,26 +97,96 @@ module eth_top #(
             .sys_clk          (sys_clk),
             .clk_200m         (clk_200m),
             .sys_rst          (sys_rst),
+
             .rgmii_rxd_in     (rgmii_rxd_in),
             .rgmii_rxc_in     (rgmii_rxc_in),
             .rgmii_rx_ctl_in  (rgmii_rx_ctl_in),
+
             .rgmii_txd_out    (rgmii_txd_out),
             .rgmii_txc_out    (rgmii_txc_out),
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
+
             .phy_tx_clk       (phy_tx_clk),
-            .phy_txd_in       (phy_txd_in),
-            .phy_tvalid_in    (phy_tvalid_in),
-            .phy_tready_out   (phy_tready_out),
-            .phy_terr_in      (phy_terr_in),
+            .phy_txd_in       (phy_txd),
+            .phy_tvalid_in    (phy_tvalid),
+            .phy_tready_out   (phy_tready),
+            .phy_terr_in      (phy_terr),
+
             .phy_rx_clk       (phy_rx_clk),
-            .phy_rxd_out      (phy_rxd_out),
-            .phy_rvalid_out   (phy_rvalid_out),
-            .phy_rready_in    (phy_rready_in),
-            .phy_rerr_out     (phy_rerr_out)
+            .phy_rxd_out      (phy_rxd),
+            .phy_rvalid_out   (phy_rvalid),
+            .phy_rready_in    (phy_rready),
+            .phy_rerr_out     (phy_rerr)
         );
 
 assign  rgmii_clk_in    = rgmii_clk_out;
 assign  sys_rst         = !clk_locked;
+
+/*------------------------------------------------------------------------------
+--  mac logic
+------------------------------------------------------------------------------*/
+    wire    [7:0]       mac_tdata, mac_rdata;
+
+    mac_top inst_mac_top
+        (
+            .logic_clk      (logic_clk),
+            .logic_rst      (logic_rst),
+
+            .phy_rx_clk     (phy_rx_clk),
+            .phy_rxd_in     (phy_rxd),
+            .phy_rvalid_in  (phy_rvalid),
+            .phy_rerr_in    (phy_rerr),
+
+            .mac_rdata_out  (mac_rdata),
+            .mac_rvalid_out (mac_rvalid),
+            .mac_rready_in  (mac_rready),
+            .mac_rlast_out  (mac_rlast),
+
+            .mac_tdata_in   (mac_tdata),
+            .mac_tvalid_in  (mac_tvalid),
+            .mac_tready_out (mac_tready),
+            .mac_tlast_in   (mac_tlast),
+
+            .phy_tx_clk     (phy_tx_clk),
+            .phy_txd_out    (phy_txd),
+            .phy_tvalid_out (phy_tvalid),
+            .phy_terr_out   (phy_terr)
+        );
+/*------------------------------------------------------------------------------
+--  network logic
+------------------------------------------------------------------------------*/
+    net_top #(
+            .LOCAL_IP(LOCAL_IP),
+            .LOCAL_MAC(LOCAL_MAC)
+        ) inst_net_top (
+            .logic_clk              (logic_clk),
+            .logic_rst              (logic_rst),
+
+            .net_rdata_in           (mac_rdata),
+            .net_rvalid_in          (mac_rvalid),
+            .net_rready_out         (mac_rready),
+            .net_rlast_in           (mac_rlast),
+
+            .net_tdata_out          (mac_tdata),
+            .net_tvalid_out         (mac_tvalid),
+            .net_tready_in          (mac_tready),
+            .net_tlast_out          (mac_tlast),
+
+            .trig_arp_qvalid_in     (trig_arp_qvalid),
+            .trig_arp_ip_in         (trig_arp_ip),
+            .trig_arp_qready_out    (trig_arp_qready),
+
+            .arp_query_ip_in        (arp_query_ip),
+            .arp_query_valid_in     (arp_query_valid),
+            .arp_query_ready_out    (arp_query_ready),
+            .arp_response_mac_out   (arp_response_mac),
+            .arp_response_valid_out (arp_response_valid),
+            .arp_response_ready_in  (arp_response_ready),
+            .arp_response_err_out   (arp_response_err)
+        );
+
+    assign  logic_clk = clk_200m;
+    assign  logic_rst = !clk_locked;
 
 
 endmodule : eth_top
