@@ -218,4 +218,4 @@
   .m_axis_tlast     (mac_rlast_out)      // output wire m_axis_tlast
 );  
 
- endmodule : mac_crc_verify
+ endmodule : mac_rx_crc_verify
