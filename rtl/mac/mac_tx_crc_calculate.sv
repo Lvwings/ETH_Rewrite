@@ -56,7 +56,7 @@
             PREAMBLE: tcrc_next_state = flag_preamble_over  ? DATA : PREAMBLE;
             DATA    : tcrc_next_state = flag_data_over      ? CRC : DATA;
             CRC     : tcrc_next_state = fifo_tlast          ? IDLE : CRC;
-            default : /* default */;
+            default : tcrc_next_state = IDLE;
         endcase
     end
 /*------------------------------------------------------------------------------
@@ -127,7 +127,7 @@
                 end
             end
             DATA    : begin
-                mac_tready_o        <=  fifo_tready;
+                mac_tready_o        <=  !mac_tlast_in && mac_tvalid_in && fifo_tready;
                 fifo_tdata          <=  (mac_tvalid_in && mac_tready_out && fifo_tready) ? mac_tdata_in : fifo_tdata;
                 fifo_tvalid         <=  (mac_tvalid_in && mac_tready_out && fifo_tready);
                 fifo_tlast          <=  0;
@@ -160,6 +160,7 @@
 /*------------------------------------------------------------------------------
 --  mac tx data fifo
 ------------------------------------------------------------------------------*/
+
  mac_tx_fifo mac_tx_fifo (
   .s_axis_aresetn   (!logic_rst),        // input wire s_axis_aresetn
   .s_axis_aclk      (logic_clk),        // input wire s_axis_aclk

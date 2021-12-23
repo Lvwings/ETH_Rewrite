@@ -70,7 +70,7 @@
     always_comb begin
         case (split_state)
             IDLE        :                                                   split_next  =   net_rvalid_in ? ETH_HEAD : IDLE;
-            ETH_HEAD    :   if      (flag_err_frame)                        split_next  =   IDLE;
+            ETH_HEAD    :   if      (flag_err_frame || net_rlast_in)        split_next  =   IDLE;
                             else if (flag_rx_over && eth_type == ARP_TYPE)  split_next  =   ARP_DATA;
                             else if (flag_rx_over && eth_type == IP_TYPE)   split_next  =   IP_HEAD;
                             else                                            split_next  =   ETH_HEAD;
@@ -102,9 +102,9 @@
 /*------------------------------------------------------------------------------
 --  rx mac data
 ------------------------------------------------------------------------------*/
-    logic   [7:0]   length_cnt      =   '0;
-    logic   [47:0]  eth_da_mac      =   '0;
-    logic   [31:0]  ip_da_ip        =   '0;    
+    (* MARK_DEBUG="true" *) logic   [7:0]   length_cnt      =   '0;
+    (* MARK_DEBUG="true" *) logic   [47:0]  eth_da_mac      =   '0;
+    (* MARK_DEBUG="true" *) logic   [31:0]  ip_da_ip        =   '0;    
     logic           net_rready_o    =   '0;
 
     always_ff @(posedge logic_clk) begin 
@@ -183,6 +183,7 @@
                         flag_rx_over    <=  '0;
                         flag_err_frame  <=  '0;
                         net_rready_o    <=  '0;
+                        eth_type        <=  '0;
                         eth_da_mac      <=  '0;
                         ip_da_ip        <=  '0;
                         ip_proto        <=  '0;

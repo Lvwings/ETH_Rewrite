@@ -48,19 +48,30 @@ module eth_top #(
 
 );
 
-        wire                clk_locked;
+        logic                clk_locked;
 
-        wire              phy_tx_clk;
-   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_txd;
-   (* MARK_DEBUG="true" *)       wire              phy_tvalid;
-   (* MARK_DEBUG="true" *)       wire              phy_tready;
-   (* MARK_DEBUG="true" *)       wire              phy_terr;        //  user port
+        logic              phy_tx_clk;
+   (* MARK_DEBUG="true" *)       logic  [7:0]       phy_txd;
+   (* MARK_DEBUG="true" *)       logic              phy_tvalid;
+   (* MARK_DEBUG="true" *)       logic              phy_tready;
+   (* MARK_DEBUG="true" *)       logic              phy_terr;        //  user port
 
-//   (* MARK_DEBUG="true" *)      wire              phy_rx_clk;
-   (* MARK_DEBUG="true" *)       wire  [7:0]       phy_rxd;
-   (* MARK_DEBUG="true" *)       wire              phy_rvalid;
-   (* MARK_DEBUG="true" *)       wire              phy_rready;
-   (* MARK_DEBUG="true" *)       wire              phy_rerr;        //  user port                    
+   (* MARK_DEBUG="true" *)       logic  [7:0]       phy_rxd;
+   (* MARK_DEBUG="true" *)       logic              phy_rvalid;
+   (* MARK_DEBUG="true" *)       logic              phy_rready;
+   (* MARK_DEBUG="true" *)       logic              phy_rerr;        //  user port
+
+   (* MARK_DEBUG="true" *)       logic  [7:0]       mac_tdata;
+   (* MARK_DEBUG="true" *)       logic              mac_tvalid;
+   (* MARK_DEBUG="true" *)       logic              mac_tready;
+   (* MARK_DEBUG="true" *)       logic              mac_tlast;        
+
+   (* MARK_DEBUG="true" *)       logic  [7:0]       mac_rdata;
+   (* MARK_DEBUG="true" *)       logic              mac_rvalid;
+   (* MARK_DEBUG="true" *)       logic              mac_rready;
+   (* MARK_DEBUG="true" *)       logic              mac_rlast;   
+
+       
 /*------------------------------------------------------------------------------
 --  clock generate
 ------------------------------------------------------------------------------*/
@@ -94,7 +105,7 @@ module eth_top #(
             .CLOCK_INPUT_STYLE(CLOCK_INPUT_STYLE),
             .IDELAY_TAP_OPTION(IDELAY_TAP_OPTION)
         ) inst_phy_top (
-            .sys_clk          (sys_clk),
+            .sys_clk          (clk_200m),
             .clk_200m         (clk_200m),
             .sys_rst          (sys_rst),
 
@@ -125,7 +136,7 @@ assign  sys_rst         = !clk_locked;
 /*------------------------------------------------------------------------------
 --  mac logic
 ------------------------------------------------------------------------------*/
-    wire    [7:0]       mac_tdata, mac_rdata;
+    logic    [7:0]       mac_tdata, mac_rdata;
 
     mac_top inst_mac_top
         (
@@ -152,6 +163,8 @@ assign  sys_rst         = !clk_locked;
             .phy_tvalid_out (phy_tvalid),
             .phy_terr_out   (phy_terr)
         );
+    assign  phy_tx_clk  =   clk_125m;
+    assign  logic_rst   =   !clk_locked;
 /*------------------------------------------------------------------------------
 --  network logic
 ------------------------------------------------------------------------------*/
@@ -186,7 +199,5 @@ assign  sys_rst         = !clk_locked;
         );
 
     assign  logic_clk = clk_200m;
-    assign  logic_rst = !clk_locked;
-
 
 endmodule : eth_top

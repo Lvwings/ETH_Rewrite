@@ -72,13 +72,13 @@
 /*------------------------------------------------------------------------------
 --  state jump
 ------------------------------------------------------------------------------*/
-    logic   [7:0]   arp_cnt     =   '0;
-    logic   [15:0]  opcode      =   '0;
-    logic   [31:0]  da_ip       =   '0;
-    logic   [31:0]  sa_ip       =   '0;
-    logic   [47:0]  sa_mac      =   '0;
+(* MARK_DEBUG="true" *)    logic   [15:0]  opcode      =   '0;
+(* MARK_DEBUG="true" *)    logic   [31:0]  da_ip       =   '0;
+(* MARK_DEBUG="true" *)    logic   [31:0]  sa_ip       =   '0;
+(* MARK_DEBUG="true" *)    logic   [47:0]  sa_mac      =   '0;
 
-    logic           flag_rerr   =   '0;
+(* MARK_DEBUG="true" *)    logic           flag_rerr   =   '0;
+                           logic           flag_rover  =   '0;
 
     always_comb begin 
         case (arp_rstate)                  
@@ -86,7 +86,7 @@
                             else                                        arp_rnext    =   RIDLE;
         
             RECEIVE :       if      (flag_rerr)                         arp_rnext    =   RIDLE;
-                            else if (arp_rlast_in && arp_rready_out)    arp_rnext    =   WRITE_ADDR;
+                            else if (arp_rlast_in && flag_rover)        arp_rnext    =   WRITE_ADDR;
                             else                                        arp_rnext    =   RECEIVE;
 
             WRITE_ADDR  :   arp_rnext = arp_write_ready_in  ? WRITE_DATA     : WRITE_ADDR;
@@ -100,17 +100,22 @@
 /*------------------------------------------------------------------------------
 --  receive arp data 
 ------------------------------------------------------------------------------*/
-    logic           arp_rready_o        =   '0;
-    logic           trig_arp_qready_o   =   '0;
-    logic   [7:0]   lenth_cnt           =   '0;
+(* MARK_DEBUG="true" *)    logic           arp_rready_o        =   '0;
+(* MARK_DEBUG="true" *)    logic           trig_arp_qready_o   =   '0;
+(* MARK_DEBUG="true" *)    logic   [7:0]   lenth_cnt           =   '0;
 
     always_ff @(posedge logic_clk) begin 
         case (arp_rnext)
             RIDLE        :   begin
-                        opcode    <=  '0;
-                        sa_mac    <=  '0;
-                        sa_ip     <=  '0;
-                        da_ip     <=  '0;                            
+                        opcode            <=  '0;
+                        sa_mac            <=  '0;
+                        sa_ip             <=  '0;
+                        da_ip             <=  '0;  
+                        lenth_cnt         <=  '0;
+                        arp_rready_o      <=  '0; 
+                        flag_rerr         <=  '0; 
+                        flag_rover        <=  '0;
+                        trig_arp_qready_o <=  '0;                                                    
             end // IDEL        
             RECEIVE     :   begin
                         arp_rready_o    <=  arp_rvalid_in;
@@ -145,15 +150,23 @@
                         endcase
 
                         //  only response to local ip
-                        if (lenth_cnt == ARP_LENGTH) 
+                        if (lenth_cnt == ARP_LENGTH) begin
+                            flag_rover            <=  1;
                             if (opcode == OPCODE_QUERY && da_ip == LOCAL_IP)
                                 flag_rerr         <=  0;
                             else if (opcode == OPCODE_RESPONSE && da_ip == LOCAL_IP)
                                 trig_arp_qready_o <=  (sa_ip == trig_arp_ip_in);
                             else
                                 flag_rerr         <=  1;
-                        else
+                        end
+                        else if (arp_rlast_in && !flag_rover)
+                            flag_rerr             <=  1;
+                        else begin
                             flag_rerr             <=  flag_rerr;
+                            flag_rover            <=  flag_rover;
+                            trig_arp_qready_o     <=  0;                           
+                        end
+                            
             end // RECEIVE 
             default : begin
                         opcode            <=  opcode;
@@ -162,7 +175,8 @@
                         da_ip             <=  da_ip;  
                         lenth_cnt         <=  '0;
                         arp_rready_o      <=  '0; 
-                        flag_rerr         <=  '0; 
+                        flag_rerr         <=  '0;
+                        flag_rover        <=  '0; 
                         trig_arp_qready_o <=  '0;            
             end // default 
         endcase
@@ -267,7 +281,7 @@
     
 
     logic       [7:0]   response_cnt    =   '0;
-    logic       [7:0]   align_out       =   '0;
+    logic       [7:0]   align_out;
     logic       [7:0]   arp_tdata_o     =   '0;
     logic               arp_tvalid_o    =   '0;
     logic               arp_tlast_o     =   '0; 
@@ -295,7 +309,7 @@
             ARP_SEND        :   begin
                             arp_tvalid_o    <=  1;
                             response_cnt    <=  response_cnt + (arp_tvalid_out & arp_tready_in);
-                            align_out       <=  arp_tready_in ? response_cnt + 2 : response_cnt + 1;    //  align data with tready
+                           
 
                             if      (align_out < 14)    arp_tdata_o <=  arp_head[(13-align_out)*8 +: 8];                                
                             else if (align_out < 20)    arp_tdata_o <=  ARP_PROTO[(19-align_out)*8 +: 8];                                
@@ -309,7 +323,6 @@
 
             default : begin
                             response_cnt <=   '0;
-                            align_out    <=   '0;
                             arp_tdata_o  <=   '0;
                             arp_tvalid_o <=   '0;
                             arp_tlast_o  <=   '0; 
@@ -319,6 +332,7 @@
         endcase
     end
 
+    assign  align_out       =   arp_tready_in ? response_cnt + 1 : response_cnt;    //  align data with tready
     assign  arp_tdata_out   =   arp_tdata_o;
     assign  arp_tvalid_out  =   arp_tvalid_o;
     assign  arp_tlast_out   =   arp_tlast_o;

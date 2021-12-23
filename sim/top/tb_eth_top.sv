@@ -32,6 +32,8 @@ module tb_eth_top ();
     parameter       IODDR_STYLE = "IODDR";
     parameter CLOCK_INPUT_STYLE = "BUFR";
     parameter IDELAY_TAP_OPTION = "Fixed";
+    parameter          LOCAL_IP = 32'hC0A8_006E;
+    parameter         LOCAL_MAC = 48'hABCD_1234_5678;
 
     logic       extern_clk_in;
     logic       extern_rstn_in;
@@ -44,22 +46,14 @@ module tb_eth_top ();
     logic       rgmii_tx_ctl_out;
     logic       mdio_clk_out;
     logic       mdio_rstn_out;
-    logic       phy_tx_clk;
-    logic [7:0] phy_txd_in;
-    logic       phy_tvalid_in;
-    logic       phy_tready_out;
-    logic       phy_terr_in;
-    logic       phy_rx_clk;
-    logic [7:0] phy_rxd_out;
-    logic       phy_rvalid_out;
-    logic       phy_rready_in;
-    logic       phy_rerr_out;
 
     eth_top #(
             .XILINX_FAMILY(XILINX_FAMILY),
             .IODDR_STYLE(IODDR_STYLE),
             .CLOCK_INPUT_STYLE(CLOCK_INPUT_STYLE),
-            .IDELAY_TAP_OPTION(IDELAY_TAP_OPTION)
+            .IDELAY_TAP_OPTION(IDELAY_TAP_OPTION),
+            .LOCAL_IP(LOCAL_IP),
+            .LOCAL_MAC(LOCAL_MAC)
         ) inst_eth_top (
             .extern_clk_in    (extern_clk_in),
             .extern_rstn_in   (extern_rstn_in),
@@ -71,17 +65,7 @@ module tb_eth_top ();
             .rgmii_txc_out    (rgmii_txc_out),
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
             .mdio_clk_out     (mdio_clk_out),
-            .mdio_rstn_out    (mdio_rstn_out),
-            .phy_tx_clk       (phy_tx_clk),
-            .phy_txd_in       (phy_txd_in),
-            .phy_tvalid_in    (phy_tvalid_in),
-            .phy_tready_out   (phy_tready_out),
-            .phy_terr_in      (phy_terr_in),
- //           .phy_rx_clk       (phy_rx_clk),
-            .phy_rxd_out      (phy_rxd_out),
-            .phy_rvalid_out   (phy_rvalid_out),
-            .phy_rready_in    (phy_rready_in),
-            .phy_rerr_out     (phy_rerr_out)
+            .mdio_rstn_out    (mdio_rstn_out)
         );
 
     assign  extern_clk_in  = clk;
@@ -112,19 +96,32 @@ module tb_eth_top ();
         forever #(2) rgmii_rxc_2x = ~rgmii_rxc_2x;
     end
 
-    assign  phy_tx_clk     = rgmii_rxc_in;
-    assign  phy_txd_in     = 8'hAB;
-    assign  phy_tvalid_in  = 1'b1;
-    assign  phy_terr_in    = 1'b0;     
 
-    reg [5:0] rxc_cnt = 0;
+    /*------------------------------------------------------------------------------
+    --  initial test data
+    ------------------------------------------------------------------------------*/
+    localparam  FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
+    localparam  DATA_LENGTH =   72;
+
+    reg [7:0]   data_ram    [DATA_LENGTH-1 : 0];
+
+    initial begin
+        $readmemh(FLIE_PATH,data_ram);
+    end
+
+    /*------------------------------------------------------------------------------
+    --  rgmii data
+    ------------------------------------------------------------------------------*/
+    localparam  DATA_DELAY  = 32;
+    reg [7:0]   rxc_cnt     = 0;
+
 
     always_ff @(posedge rgmii_rxc_2x) begin 
         rxc_cnt <= rxc_cnt + 1;
 
-        if (rxc_cnt > 16) begin
-            rgmii_rxd_in    <= rxc_cnt;
-            rgmii_rx_ctl_in <= rxc_cnt[0];
+        if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
+            rgmii_rxd_in    <= rxc_cnt[0] ? data_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : data_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];;
+            rgmii_rx_ctl_in <= 1;
         end
         else begin
             rgmii_rxd_in    <= 0;
