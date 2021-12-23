@@ -64,8 +64,7 @@
             .mac_rdata_out  (mac_rdata_out),
             .mac_rvalid_out (mac_rvalid_out),
             .mac_rready_in  (mac_rready_in),
-            .mac_rlast_out  (mac_rlast_out),
-            .mac_ruser_out  (mac_ruser_out)
+            .mac_rlast_out  (mac_rlast_out)
         );
 
  endmodule : mac_top
