@@ -233,6 +233,9 @@ Galois feed-forward style
             end
         end
     end
+    else if (rst) begin
+        lfsr_state_reg = '0;
+    end
  end
 
 /*------------------------------------------------------------------------------

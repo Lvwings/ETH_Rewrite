@@ -80,7 +80,7 @@
     ------------------------------------------------------------------------------*/
     localparam  FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
     localparam  ADDR_START  =   8;
-    localparam  ADDR_END    =   68;
+    localparam  ADDR_END    =   50;
     localparam  DATA_LENGTH =   ADDR_END - ADDR_START;
 
     reg [7:0]   data_ram    [ADDR_END - 1 : 0];
