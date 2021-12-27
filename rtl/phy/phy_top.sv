@@ -26,7 +26,6 @@ module phy_top#(
 	    parameter IDELAY_TAP_OPTION = "Training"	   	
 	) 
 	(
-		input			sys_clk,
 		input			clk_200m,
 		input			sys_rst,
     // The following ports are the RGMII physical interface: these will be at pins on the FPGA
@@ -39,8 +38,8 @@ module phy_top#(
 		output			rgmii_tx_ctl_out,
 		
 	//	The following ports are the internal GMII connections from IOB logic to mac
-
 		input			phy_tx_clk,
+		input			phy_tx_clk90,
 		input 	[7:0]	phy_txd_in,
 		input			phy_tvalid_in,
 		output			phy_tready_out,
@@ -50,10 +49,16 @@ module phy_top#(
 		output	[7:0]	phy_rxd_out,
 		output			phy_rvalid_out,
 		input			phy_rready_in,
-		output			phy_rerr_out		//	user port
+		output			phy_rerr_out,		//	user port
+
+	//	The following ports are the internal GMII connections from IOB logic to mac
+ 		input 			rgmii_clk_in,    	// Clock
+    	inout   		mdio, 		
+ 		output 			mdio_clk_out, 
+ 		output 			mdio_rstn_out		
 
 );								
-	wire	phy_rx_rst;
+	logic	phy_rx_rst;
 /*------------------------------------------------------------------------------
 --  reset cdc
 ------------------------------------------------------------------------------*/
@@ -77,8 +82,8 @@ module phy_top#(
 /*------------------------------------------------------------------------------
 --  Drive input RGMII Rx signals from PADS through IODELAYS.
 ------------------------------------------------------------------------------*/
-	wire	[3:0]	rgmii_rxd_delay;
-	wire			rgmii_rx_ctl_delay;
+	logic	[3:0]	rgmii_rxd_delay;
+	logic			rgmii_rx_ctl_delay;
 
 	generate
 		if (IDELAY_TAP_OPTION == "Training")
@@ -107,7 +112,7 @@ module phy_top#(
 /*------------------------------------------------------------------------------
 --  RGMII Receiver Logic : receive signals through IOBs from RGMII interface
 ------------------------------------------------------------------------------*/
-	wire	rgmii_rx_ctl_reg;
+	logic	rgmii_rx_ctl_reg;
 
 		phy_iddr #(
 			.IODDR_STYLE(IODDR_STYLE),
@@ -133,7 +138,9 @@ module phy_top#(
 /*------------------------------------------------------------------------------
 --  RGMII Transmitter Logic : drive TX signals through IOBs onto RGMII interface
 ------------------------------------------------------------------------------*/
-	wire	rgmii_tx_ctl_reg;
+	logic	rgmii_tx_ctl_reg;
+	logic	rgmii_txc_outbuf;
+
 
 		phy_oddr #(
 			.IODDR_STYLE(IODDR_STYLE),
@@ -155,8 +162,34 @@ module phy_top#(
 			.q_out   (rgmii_tx_ctl_out)
 		);
 
+		phy_oddr #(
+			.IODDR_STYLE(IODDR_STYLE),
+			.WIDTH(1)
+		) inst_rgmii_txc (
+			.phy_clk (phy_tx_clk90),
+			.d1_in   (1),
+			.d2_in   (0),
+			.q_out   (rgmii_txc_outbuf)
+		);
+
+		OBUF rgmii_txc_obuf (
+			.I	(rgmii_txc_outbuf),
+			.O	(rgmii_txc_out)
+		);
+
 	assign	rgmii_tx_ctl_reg	= phy_tvalid_in ^ phy_terr_in;	
-	assign	rgmii_txc_out 		= phy_tx_clk;
 	assign	phy_tready_out		= 1'b1;
 
+/*------------------------------------------------------------------------------
+--  MDIO interface
+------------------------------------------------------------------------------*/
+
+    phy_mdio inst_phy_mdio
+        (
+            .rgmii_clk_in  (rgmii_clk_in),
+            .sys_rst       (sys_rst),
+            .mdio          (mdio),
+            .mdio_clk_out  (mdio_clk_out),
+            .mdio_rstn_out (mdio_rstn_out)
+        );
 endmodule : phy_top
