@@ -102,9 +102,9 @@
 /*------------------------------------------------------------------------------
 --  rx mac data
 ------------------------------------------------------------------------------*/
-    (* MARK_DEBUG="true" *) logic   [7:0]   length_cnt      =   '0;
-    (* MARK_DEBUG="true" *) logic   [47:0]  eth_da_mac      =   '0;
-    (* MARK_DEBUG="true" *) logic   [31:0]  ip_da_ip        =   '0;    
+    logic   [7:0]   length_cnt      =   '0;
+    logic   [47:0]  eth_da_mac      =   '0;
+    logic   [31:0]  ip_da_ip        =   '0;    
     logic           net_rready_o    =   '0;
 
     always_ff @(posedge logic_clk) begin 

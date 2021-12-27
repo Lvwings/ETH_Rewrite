@@ -72,13 +72,13 @@
 /*------------------------------------------------------------------------------
 --  state jump
 ------------------------------------------------------------------------------*/
-(* MARK_DEBUG="true" *)    logic   [15:0]  opcode      =   '0;
-(* MARK_DEBUG="true" *)    logic   [31:0]  da_ip       =   '0;
-(* MARK_DEBUG="true" *)    logic   [31:0]  sa_ip       =   '0;
-(* MARK_DEBUG="true" *)    logic   [47:0]  sa_mac      =   '0;
+    logic   [15:0]  opcode      =   '0;
+    logic   [31:0]  da_ip       =   '0;
+    logic   [31:0]  sa_ip       =   '0;
+    logic   [47:0]  sa_mac      =   '0;
 
-(* MARK_DEBUG="true" *)    logic           flag_rerr   =   '0;
-                           logic           flag_rover  =   '0;
+    logic           flag_rerr   =   '0;
+    logic           flag_rover  =   '0;
 
     always_comb begin 
         case (arp_rstate)                  
@@ -100,9 +100,9 @@
 /*------------------------------------------------------------------------------
 --  receive arp data 
 ------------------------------------------------------------------------------*/
-(* MARK_DEBUG="true" *)    logic           arp_rready_o        =   '0;
-(* MARK_DEBUG="true" *)    logic           trig_arp_qready_o   =   '0;
-(* MARK_DEBUG="true" *)    logic   [7:0]   lenth_cnt           =   '0;
+    logic           arp_rready_o        =   '0;
+    logic           trig_arp_qready_o   =   '0;
+    logic   [7:0]   lenth_cnt           =   '0;
 
     always_ff @(posedge logic_clk) begin 
         case (arp_rnext)

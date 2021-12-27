@@ -26,7 +26,7 @@ module eth_top #(
         // Use Fixed to fix the tap
         parameter IDELAY_TAP_OPTION = "Fixed" ,
         parameter LOCAL_IP          =   32'hC0A8_006E,
-        parameter LOCAL_MAC         =   48'hABCD_1234_5678                  
+        parameter LOCAL_MAC         =   48'h00D0_0800_0002                  
     )                                                   
     (
         input               extern_clk_in,      // Clock
@@ -42,6 +42,7 @@ module eth_top #(
         output              rgmii_txc_out,      
         output              rgmii_tx_ctl_out,
 
+        inout               mdio,
         output              mdio_clk_out,
         output              mdio_rstn_out
     //  The following ports are the internal GMII connections from IOB logic to mac
@@ -51,25 +52,25 @@ module eth_top #(
         logic                clk_locked;
 
         logic              phy_tx_clk;
-   (* MARK_DEBUG="true" *)       logic  [7:0]       phy_txd;
-   (* MARK_DEBUG="true" *)       logic              phy_tvalid;
-   (* MARK_DEBUG="true" *)       logic              phy_tready;
-   (* MARK_DEBUG="true" *)       logic              phy_terr;        //  user port
+        logic  [7:0]       phy_txd;
+        logic              phy_tvalid;
+        logic              phy_tready;
+        logic              phy_terr;        //  user port
 
-   (* MARK_DEBUG="true" *)       logic  [7:0]       phy_rxd;
-   (* MARK_DEBUG="true" *)       logic              phy_rvalid;
-   (* MARK_DEBUG="true" *)       logic              phy_rready;
-   (* MARK_DEBUG="true" *)       logic              phy_rerr;        //  user port
+        logic  [7:0]       phy_rxd;
+        logic              phy_rvalid;
+        logic              phy_rready   =   '1;
+        logic              phy_rerr;        //  user port
 
-   (* MARK_DEBUG="true" *)       logic  [7:0]       mac_tdata;
-   (* MARK_DEBUG="true" *)       logic              mac_tvalid;
-   (* MARK_DEBUG="true" *)       logic              mac_tready;
-   (* MARK_DEBUG="true" *)       logic              mac_tlast;        
+        logic  [7:0]       mac_tdata;
+        logic              mac_tvalid;
+        logic              mac_tready;
+        logic              mac_tlast;        
 
-   (* MARK_DEBUG="true" *)       logic  [7:0]       mac_rdata;
-   (* MARK_DEBUG="true" *)       logic              mac_rvalid;
-   (* MARK_DEBUG="true" *)       logic              mac_rready;
-   (* MARK_DEBUG="true" *)       logic              mac_rlast;   
+        logic  [7:0]       mac_rdata;
+        logic              mac_rvalid;
+        logic              mac_rready;
+        logic              mac_rlast;   
 
        
 /*------------------------------------------------------------------------------
@@ -80,6 +81,7 @@ module eth_top #(
    (
     // Clock out ports
     .clk_125m(clk_125m),     // output clk_125m
+    .clk_125m90(clk_125m90),     // output clk_125m90
     .clk_200m(clk_200m),     // output clk_200m
     .clk_25m(rgmii_clk_out),     // output clk_25m
     // Status and control signals
@@ -91,13 +93,6 @@ module eth_top #(
 /*------------------------------------------------------------------------------
 --  phy logic
 ------------------------------------------------------------------------------*/   
-    phy_mdio inst_phy_mdio
-        (
-            .rgmii_clk_in  (rgmii_clk_in),
-            .sys_rst       (sys_rst),
-            .mdio_clk_out  (mdio_clk_out),
-            .mdio_rstn_out (mdio_rstn_out)
-        );
 
     phy_top #(
             .XILINX_FAMILY(XILINX_FAMILY),
@@ -105,38 +100,39 @@ module eth_top #(
             .CLOCK_INPUT_STYLE(CLOCK_INPUT_STYLE),
             .IDELAY_TAP_OPTION(IDELAY_TAP_OPTION)
         ) inst_phy_top (
-            .sys_clk          (clk_200m),
             .clk_200m         (clk_200m),
             .sys_rst          (sys_rst),
-
             .rgmii_rxd_in     (rgmii_rxd_in),
             .rgmii_rxc_in     (rgmii_rxc_in),
             .rgmii_rx_ctl_in  (rgmii_rx_ctl_in),
-
             .rgmii_txd_out    (rgmii_txd_out),
             .rgmii_txc_out    (rgmii_txc_out),
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
-
             .phy_tx_clk       (phy_tx_clk),
+            .phy_tx_clk90     (phy_tx_clk90),
             .phy_txd_in       (phy_txd),
             .phy_tvalid_in    (phy_tvalid),
             .phy_tready_out   (phy_tready),
             .phy_terr_in      (phy_terr),
-
             .phy_rx_clk       (phy_rx_clk),
             .phy_rxd_out      (phy_rxd),
             .phy_rvalid_out   (phy_rvalid),
             .phy_rready_in    (phy_rready),
-            .phy_rerr_out     (phy_rerr)
+            .phy_rerr_out     (phy_rerr),
+            .rgmii_clk_in     (rgmii_clk_in),
+            .mdio             (mdio),
+            .mdio_clk_out     (mdio_clk_out),
+            .mdio_rstn_out    (mdio_rstn_out)
         );
 
+assign  phy_tx_clk      = clk_125m;
+assign  phy_tx_clk90    = clk_125m90;
 assign  rgmii_clk_in    = rgmii_clk_out;
 assign  sys_rst         = !clk_locked;
 
 /*------------------------------------------------------------------------------
 --  mac logic
 ------------------------------------------------------------------------------*/
-    logic    [7:0]       mac_tdata, mac_rdata;
 
     mac_top inst_mac_top
         (
@@ -163,11 +159,14 @@ assign  sys_rst         = !clk_locked;
             .phy_tvalid_out (phy_tvalid),
             .phy_terr_out   (phy_terr)
         );
-    assign  phy_tx_clk  =   clk_125m;
+
     assign  logic_rst   =   !clk_locked;
 /*------------------------------------------------------------------------------
 --  network logic
 ------------------------------------------------------------------------------*/
+    logic   [31:0]  arp_query_ip;
+    logic   [47:0]  arp_response_mac;
+    
     net_top #(
             .LOCAL_IP(LOCAL_IP),
             .LOCAL_MAC(LOCAL_MAC)

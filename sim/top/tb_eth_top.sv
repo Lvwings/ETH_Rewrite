@@ -33,7 +33,7 @@ module tb_eth_top ();
     parameter CLOCK_INPUT_STYLE = "BUFR";
     parameter IDELAY_TAP_OPTION = "Fixed";
     parameter          LOCAL_IP = 32'hC0A8_006E;
-    parameter         LOCAL_MAC = 48'hABCD_1234_5678;
+    parameter         LOCAL_MAC = 48'h00D0_0800_0002;
 
     logic       extern_clk_in;
     logic       extern_rstn_in;
