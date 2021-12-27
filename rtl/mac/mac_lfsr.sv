@@ -214,7 +214,6 @@ Galois feed-forward style
  integer m,n;
 
  always_comb begin 
-    if (data_valid_in) begin
         for (m = 0; m < LFSR_WIDTH; m = m+1) begin
             lfsr_state_reg[m]   =   0;
 
@@ -232,10 +231,6 @@ Galois feed-forward style
                 end
             end
         end
-    end
-    else if (rst) begin
-        lfsr_state_reg = '0;
-    end
  end
 
 /*------------------------------------------------------------------------------

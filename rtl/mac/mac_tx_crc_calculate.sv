@@ -70,6 +70,7 @@
     logic               crc_valid   =   '0;
     logic               crc_rst     =   '0;
     logic   [31:0]      crc_result;
+    logic   [31:0]      crc_resultr;
 
     always_ff @(posedge logic_clk) begin 
         case (tcrc_next_state)
@@ -114,7 +115,7 @@
             .data_valid_in         (crc_valid),
             .data_out              (),
             .lfsr_state_out_comb   (crc_result),
-            .lfsr_state_out_reg    ()
+            .lfsr_state_out_reg    (crc_resultr)
         );    
     
 /*------------------------------------------------------------------------------
@@ -164,7 +165,7 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
             CRC     : begin
                 if (fifo_tready) begin
                     crc_cnt         <=  crc_cnt + 1;
-                    fifo_tdata      <=  crc_result[8*crc_cnt +: 8];
+                    fifo_tdata      <=  (crc_cnt == 0) ? crc_result[8*crc_cnt +: 8] : crc_resultr[8*crc_cnt +: 8];
                     fifo_tvalid     <=  1;
                     fifo_tlast      <=  (crc_cnt == 3);                    
                 end
@@ -250,6 +251,7 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
 /*------------------------------------------------------------------------------
 --  mac tx data fifo
 ------------------------------------------------------------------------------*/
+logic   [7:0]   phy_txd;
 
  mac_tx_fifo mac_tx_fifo (
   .s_axis_aresetn   (!logic_rst),        // input wire s_axis_aresetn
@@ -263,11 +265,12 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
   .m_axis_aclk      (phy_tx_clk),        // input wire m_axis_aclk
   .m_axis_tvalid    (phy_tvalid),    // output wire m_axis_tvalid
   .m_axis_tready    (phy_tready),        // input wire m_axis_tready
-  .m_axis_tdata     (phy_txd_out),       // output wire [7 : 0] m_axis_tdata
+  .m_axis_tdata     (phy_txd),       // output wire [7 : 0] m_axis_tdata
   .m_axis_tlast     (phy_tlast)          // output wire m_axis_tlast
 );
 
  assign phy_terr_out    =   0;
  assign phy_tvalid_out  =   phy_tvalid & phy_tready;
+ assign phy_txd_out     =   phy_tvalid_out ? phy_txd : 0;
 
  endmodule : mac_tx_crc_calculate
