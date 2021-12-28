@@ -29,7 +29,7 @@ module eth_top #(
         parameter LOCAL_MAC         =   48'h00D0_0800_0002                  
     )                                                   
     (
-        input               extern_clk_in,      // Clock
+        input               extern_clk_in,          // Clock
         input               extern_rstn_in,         // Asynchronous reset active low
     
         output              rgmii_clk_out,
@@ -44,12 +44,16 @@ module eth_top #(
 
         inout               mdio,
         output              mdio_clk_out,
-        output              mdio_rstn_out
-    //  The following ports are the internal GMII connections from IOB logic to mac
-
+        output              mdio_rstn_out,
+    //  The following ports are the internal connections from ETH module to others logic module
+        //  udp rx data out
+        output  [7:0]   udp_rdata_out,
+        output          udp_rvalid_out,
+        input           udp_rready_in,
+        output          udp_rlast_out
 );
 
-        logic                clk_locked;
+        logic              clk_locked;
 
         logic              phy_tx_clk;
         logic  [7:0]       phy_txd;
@@ -125,10 +129,10 @@ module eth_top #(
             .mdio_rstn_out    (mdio_rstn_out)
         );
 
-assign  phy_tx_clk      = clk_125m;
-assign  phy_tx_clk90    = clk_125m90;
-assign  rgmii_clk_in    = rgmii_clk_out;
-assign  sys_rst         = !clk_locked;
+    assign  phy_tx_clk      = clk_125m;
+    assign  phy_tx_clk90    = clk_125m90;
+    assign  rgmii_clk_in    = rgmii_clk_out;
+    assign  sys_rst         = !clk_locked;
 
 /*------------------------------------------------------------------------------
 --  mac logic
@@ -183,6 +187,11 @@ assign  sys_rst         = !clk_locked;
             .net_tvalid_out         (mac_tvalid),
             .net_tready_in          (mac_tready),
             .net_tlast_out          (mac_tlast),
+
+            .udp_rdata_out          (udp_rdata_out),
+            .udp_rvalid_out         (udp_rvalid_out),
+            .udp_rready_in          (udp_rready_in),
+            .udp_rlast_out          (udp_rlast_out),            
 
             .trig_arp_qvalid_in     (trig_arp_qvalid),
             .trig_arp_ip_in         (trig_arp_ip),

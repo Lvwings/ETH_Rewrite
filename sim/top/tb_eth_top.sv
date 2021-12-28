@@ -44,8 +44,13 @@ module tb_eth_top ();
     logic [3:0] rgmii_txd_out;
     logic       rgmii_txc_out;
     logic       rgmii_tx_ctl_out;
+    wire        mdio;
     logic       mdio_clk_out;
     logic       mdio_rstn_out;
+    logic [7:0] udp_rdata_out;
+    logic       udp_rvalid_out;
+    logic       udp_rready_in;
+    logic       udp_rlast_out;
 
     eth_top #(
             .XILINX_FAMILY(XILINX_FAMILY),
@@ -64,9 +69,15 @@ module tb_eth_top ();
             .rgmii_txd_out    (rgmii_txd_out),
             .rgmii_txc_out    (rgmii_txc_out),
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
+            .mdio             (mdio),
             .mdio_clk_out     (mdio_clk_out),
-            .mdio_rstn_out    (mdio_rstn_out)
+            .mdio_rstn_out    (mdio_rstn_out),
+            .udp_rdata_out    (udp_rdata_out),
+            .udp_rvalid_out   (udp_rvalid_out),
+            .udp_rready_in    (udp_rready_in),
+            .udp_rlast_out    (udp_rlast_out)
         );
+
 
     assign  extern_clk_in  = clk;
     assign  extern_rstn_in = srstb;
@@ -74,7 +85,7 @@ module tb_eth_top ();
     task init();
         rgmii_rxd_in    <= '0;
         rgmii_rx_ctl_in <= '0;
-
+        udp_rready_in   <=  '1;
     endtask
 
 
@@ -100,21 +111,34 @@ module tb_eth_top ();
     /*------------------------------------------------------------------------------
     --  initial test data
     ------------------------------------------------------------------------------*/
-    localparam  FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
-    localparam  DATA_LENGTH =   72;
+    localparam  ARP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
+    localparam  ARP_DATA_LENGTH =   72;
 
-    reg [7:0]   data_ram    [DATA_LENGTH-1 : 0];
 
-    initial begin
-        $readmemh(FLIE_PATH,data_ram);
-    end
+    localparam  UDP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/top/sim_udp_data.txt";
+    localparam  UDP_DATA_LENGTH =   72;
 
+    `define TEST_UDP
+
+    `ifdef TEST_UDP
+        localparam      DATA_LENGTH =   UDP_DATA_LENGTH;
+        logic   [7:0]   data_ram    [DATA_LENGTH-1 : 0];
+
+        initial begin
+            $readmemh(UDP_FLIE_PATH,data_ram);
+        end        
+    `elsif TEST_ARP
+        localparam      DATA_LENGTH =   ARP_DATA_LENGTH;
+        logic   [7:0]   data_ram    [DATA_LENGTH-1 : 0];
+
+        initial begin
+            $readmemh(ARP_FLIE_PATH,data_ram);
+    `endif
     /*------------------------------------------------------------------------------
     --  rgmii data
     ------------------------------------------------------------------------------*/
     localparam  DATA_DELAY  = 32;
     reg [7:0]   rxc_cnt     = 0;
-
 
     always_ff @(posedge rgmii_rxc_2x) begin 
         rxc_cnt <= rxc_cnt + 1;

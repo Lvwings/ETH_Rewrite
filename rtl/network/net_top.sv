@@ -17,17 +17,23 @@
     input           logic_clk,
     input           logic_rst,   
  
-     //  net rx data in
+     //  net rx data in -> from mac
     input   [7:0]   net_rdata_in,
     input           net_rvalid_in,
     output          net_rready_out,
     input           net_rlast_in,
 
-    //  net tx data out
-    output   [7:0]   net_tdata_out,
-    output           net_tvalid_out,
-    input            net_tready_in,
-    output           net_tlast_out,   
+    //  net tx data out -> to mac
+    output  [7:0]   net_tdata_out,
+    output          net_tvalid_out,
+    input           net_tready_in,
+    output          net_tlast_out,   
+
+    //  udp rx data out
+    output  [7:0]   udp_rdata_out,
+    output          udp_rvalid_out,
+    input           udp_rready_in,
+    output          udp_rlast_out,
 
      //  arp query trigger
     input           trig_arp_qvalid_in,
@@ -66,9 +72,13 @@
             .arp_rdata_out  (arp_rdata),
             .arp_rvalid_out (arp_rvalid),
             .arp_rready_in  (arp_rready),
-            .arp_rlast_out  (arp_rlast)
-        );
+            .arp_rlast_out  (arp_rlast),
 
+            .udp_rdata_out  (udp_rdata_out),
+            .udp_rvalid_out (udp_rvalid_out),
+            .udp_rready_in  (udp_rready_in),
+            .udp_rlast_out  (udp_rlast_out)
+        );
 
     arp_tx #(
             .LOCAL_IP(LOCAL_IP),
