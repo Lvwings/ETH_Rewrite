@@ -75,7 +75,7 @@ module eth_top #(
         logic              mac_rvalid;
         logic              mac_rready;
         logic              mac_rlast;   
-
+        logic  [1:0]       mac_rtype;
        
 /*------------------------------------------------------------------------------
 --  clock generate
@@ -138,8 +138,9 @@ module eth_top #(
 --  mac logic
 ------------------------------------------------------------------------------*/
 
-    mac_top inst_mac_top
-        (
+    mac_top #(
+            .LOCAL_MAC(LOCAL_MAC)
+        )inst_mac_top(
             .logic_clk      (logic_clk),
             .logic_rst      (logic_rst),
 
@@ -152,6 +153,7 @@ module eth_top #(
             .mac_rvalid_out (mac_rvalid),
             .mac_rready_in  (mac_rready),
             .mac_rlast_out  (mac_rlast),
+            .mac_rtype_out  (mac_rtype),
 
             .mac_tdata_in   (mac_tdata),
             .mac_tvalid_in  (mac_tvalid),
@@ -182,6 +184,7 @@ module eth_top #(
             .net_rvalid_in          (mac_rvalid),
             .net_rready_out         (mac_rready),
             .net_rlast_in           (mac_rlast),
+            .net_rtype_in           (mac_rtype),
 
             .net_tdata_out          (mac_tdata),
             .net_tvalid_out         (mac_tvalid),

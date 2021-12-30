@@ -9,7 +9,10 @@
  Language   : Verilog 2001
  -----------------------------------------------------------------------------*/
 
- module mac_top (
+ module mac_top #(
+    parameter       LOCAL_MAC   =   48'hABCD_1234_5678
+    )
+ (
     input           logic_clk,
     input           logic_rst,
 
@@ -23,7 +26,8 @@
     output  [7:0]   mac_rdata_out,
     output          mac_rvalid_out,
     input           mac_rready_in,
-    output          mac_rlast_out,   
+    output          mac_rlast_out,
+    output  [1:0]   mac_rtype_out,   
 
     // mac tx data in
     input   [7:0]   mac_tdata_in,
@@ -53,8 +57,9 @@
             .phy_terr_out   (phy_terr_out)
         );
 
-    mac_rx_crc_verify inst_mac_rx_crc_verify
-        (
+    mac_rx_crc_verify #(
+            .LOCAL_MAC(LOCAL_MAC)
+        ) inst_mac_rx_crc_verify (
             .logic_clk      (logic_clk),
             .logic_rst      (logic_rst),
             .phy_rx_clk     (phy_rx_clk),
@@ -64,7 +69,9 @@
             .mac_rdata_out  (mac_rdata_out),
             .mac_rvalid_out (mac_rvalid_out),
             .mac_rready_in  (mac_rready_in),
-            .mac_rlast_out  (mac_rlast_out)
+            .mac_rlast_out  (mac_rlast_out),
+            .mac_rtype_out  (mac_rtype_out)
         );
+
 
  endmodule : mac_top

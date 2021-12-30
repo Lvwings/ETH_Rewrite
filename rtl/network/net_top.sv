@@ -22,6 +22,7 @@
     input           net_rvalid_in,
     output          net_rready_out,
     input           net_rlast_in,
+    input   [1:0]   net_rtype_in,
 
     //  net tx data out -> to mac
     output  [7:0]   net_tdata_out,
@@ -68,6 +69,7 @@
             .net_rvalid_in  (net_rvalid_in),
             .net_rready_out (net_rready_out),
             .net_rlast_in   (net_rlast_in),
+            .net_rtype_in   (net_rtype_in),
 
             .arp_rdata_out  (arp_rdata),
             .arp_rvalid_out (arp_rvalid),

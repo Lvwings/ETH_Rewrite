@@ -17,11 +17,12 @@
     input           logic_clk,
     input           logic_rst,   
  
-     //  net rx data in
+     //  net rx data in  -> from mac
     input   [7:0]   net_rdata_in,
     input           net_rvalid_in,
     output          net_rready_out,
-    input           net_rlast_in,   
+    input           net_rlast_in, 
+    input   [1:0]   net_rtype_in,       //  2'b01 ARP 2'b10 IP 
 
     //  arp rx data out
     output  [7:0]   arp_rdata_out,
@@ -39,13 +40,9 @@
  /*------------------------------------------------------------------------------
  --  eth frame paramter
  ------------------------------------------------------------------------------*/
-    localparam  GLOBAL_MAC      =   48'hFFFF_FFFF_FFFF;
-    localparam  ARP_TYPE        =   16'h0806;
-    localparam  IP_TYPE         =   16'h0800;
     localparam  UDP_PROTO       =   8'h11;
     localparam  ICMP_PROTO      =   8'h01;
 
-    localparam  ETH_HEAD_LENGTH =   8'd14;
     localparam  IP_HEAD_LENGTH  =   8'd20;
     localparam  UDP_HEAD_LENGTH =   8'd8;
 
@@ -53,7 +50,7 @@
 --  state
 ------------------------------------------------------------------------------*/
     
-    typedef enum {IDLE,ETH_HEAD,IP_HEAD,UDP_HEAD,ICMP_DATA,UDP_DATA,ARP_DATA,PADDING} state_f;
+    typedef enum {IDLE,IP_HEAD,UDP_HEAD,ICMP_DATA,UDP_DATA,ARP_DATA,PADDING} state_f;
     state_f split_state,split_next;
 
     always_ff @(posedge logic_clk) begin 
@@ -67,21 +64,15 @@
 /*------------------------------------------------------------------------------
 --  state jump
 ------------------------------------------------------------------------------*/
-    logic       [15:0]  eth_type        =   '0;
-    logic       [7:0]   ip_proto        =   '0;
-
     logic               flag_err_frame  =   '0;
     logic               flag_rx_over    =   '0;
-    logic       [1:0]   flag_eth_type   =   '0;
     logic       [1:0]   flag_ip_proto   =   '0;
 
     always_comb begin
         case (split_state)
-            IDLE        :                                                   split_next  =   net_rvalid_in ? ETH_HEAD : IDLE;
-            ETH_HEAD    :   if      (flag_err_frame || net_rlast_in)        split_next  =   IDLE;
-                            else if (flag_rx_over && flag_eth_type[0])      split_next  =   ARP_DATA;
-                            else if (flag_rx_over && flag_eth_type[1])      split_next  =   IP_HEAD;
-                            else                                            split_next  =   ETH_HEAD;
+            IDLE        :   if      (net_rvalid_in && net_rtype_in[0])      split_next  =   ARP_DATA;
+                            else if (net_rvalid_in && net_rtype_in[1])      split_next  =   IP_HEAD;
+                            else                                            split_next  =   IDLE;
             
             IP_HEAD     :   if      (flag_err_frame)                        split_next  =   IDLE;
                             else if (flag_rx_over && flag_ip_proto[0])      split_next  =   ICMP_DATA;
@@ -114,9 +105,8 @@
 ------------------------------------------------------------------------------*/
     logic   [7:0]   length_cnt      =   '0;
     logic           net_rready_o    =   '0;
-
-    logic   [47:0]  eth_da_mac      =   '0;  
-
+ 
+    logic   [7:0]   ip_proto        =   '0;
     logic   [15:0]  ip_rx_checksum  =   '0;
     logic   [31:0]  ip_checksum     =   '0;     //  for calcualte   
     logic   [31:0]  ip_da_ip        =   '0; 
@@ -130,25 +120,6 @@
 
     always_ff @(posedge logic_clk) begin 
        case (split_next)
-            ETH_HEAD    : begin
-                        if (length_cnt == ETH_HEAD_LENGTH) begin
-                            flag_rx_over    <=  1;
-                            length_cnt      <=  0;
-                            net_rready_o    <=  0;
-                            flag_eth_type   <=  {(eth_type == IP_TYPE),(eth_type == ARP_TYPE)};
-                            flag_err_frame  <=  (eth_da_mac != LOCAL_MAC) & (eth_da_mac != GLOBAL_MAC);
-                        end
-                        else begin
-                            net_rready_o    <=  net_rvalid_in & (length_cnt < ETH_HEAD_LENGTH-1);
-                            length_cnt      <=  length_cnt + (net_rready_out & net_rvalid_in);
-                            eth_type        <=  {eth_type[7:0], net_rdata_in};
-
-                            if (length_cnt < 6)
-                                eth_da_mac[8*(5-length_cnt) +: 8]   <=  net_rdata_in;
-                            else
-                                eth_da_mac                          <=  eth_da_mac;                           
-                        end
-            end // ETH_HEAD 
 
             IP_HEAD     : begin
                         if (length_cnt == IP_HEAD_LENGTH) begin
@@ -190,7 +161,7 @@
                             flag_rx_over    <=  1;
                             length_cnt      <=  0;
                             net_rready_o    <=  0;
-                            udp_data_length <=  udp_length - 8;
+                            udp_data_length <=  udp_length - UDP_HEAD_LENGTH;
                         end
                         else begin
                             flag_rx_over    <=  0;
@@ -245,8 +216,6 @@
                         flag_rx_over    <=  '0;
                         flag_err_frame  <=  '0;
                         net_rready_o    <=  '0;
-                        eth_type        <=  '0;
-                        eth_da_mac      <=  '0;
                         ip_da_ip        <=  '0;
                         ip_sa_ip        <=  '0;
                         ip_proto        <=  '0;
@@ -323,12 +292,9 @@
             UDP_DATA    : begin
                 udp_sum_data    <=  net_rready_out ? {udp_sum_data[7:0], net_rdata_in} : udp_sum_data;
 
-                case (length_cnt) 
-                    //  if udp data length is odd, {8'h00} should be added behind data to make up 16-bit.      
-                    udp_data_length-1 : udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data + {net_rdata_in, 8'h00}) : (udp_checksum + {udp_sum_data[7:0], net_rdata_in});                                       
-                    default :           udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data) : udp_checksum; 
-                endcase
-
+                //  if udp data length is odd, {8'h00} should be added behind data to make up 16-bit. 
+                if (udp_data_length-1)  udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data + {net_rdata_in, 8'h00}) : (udp_checksum + {udp_sum_data[7:0], net_rdata_in});                                       
+                else                    udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data) : udp_checksum; 
             end // UDP_DATA    
                 
             default : begin
@@ -337,7 +303,6 @@
             end // default 
         endcase
     end
-
 /*------------------------------------------------------------------------------
 --  arp rx data 
 ------------------------------------------------------------------------------*/
