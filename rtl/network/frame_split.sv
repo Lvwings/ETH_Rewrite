@@ -52,7 +52,8 @@
 /*------------------------------------------------------------------------------
 --  state
 ------------------------------------------------------------------------------*/
-    typedef enum logic [2:0] {IDLE,ETH_HEAD,IP_HEAD,UDP_HEAD,ICMP_DATA,UDP_DATA,ARP_DATA,PADDING} state_f;
+    
+    typedef enum {IDLE,ETH_HEAD,IP_HEAD,UDP_HEAD,ICMP_DATA,UDP_DATA,ARP_DATA,PADDING} state_f;
     state_f split_state,split_next;
 
     always_ff @(posedge logic_clk) begin 
@@ -71,18 +72,20 @@
 
     logic               flag_err_frame  =   '0;
     logic               flag_rx_over    =   '0;
+    logic       [1:0]   flag_eth_type   =   '0;
+    logic       [1:0]   flag_ip_proto   =   '0;
 
     always_comb begin
         case (split_state)
             IDLE        :                                                   split_next  =   net_rvalid_in ? ETH_HEAD : IDLE;
             ETH_HEAD    :   if      (flag_err_frame || net_rlast_in)        split_next  =   IDLE;
-                            else if (flag_rx_over && eth_type == ARP_TYPE)  split_next  =   ARP_DATA;
-                            else if (flag_rx_over && eth_type == IP_TYPE)   split_next  =   IP_HEAD;
+                            else if (flag_rx_over && flag_eth_type[0])      split_next  =   ARP_DATA;
+                            else if (flag_rx_over && flag_eth_type[1])      split_next  =   IP_HEAD;
                             else                                            split_next  =   ETH_HEAD;
             
             IP_HEAD     :   if      (flag_err_frame)                        split_next  =   IDLE;
-                            else if (flag_rx_over && ip_proto == ICMP_PROTO)split_next  =   ICMP_DATA;
-                            else if (flag_rx_over && ip_proto == UDP_PROTO) split_next  =   UDP_HEAD;
+                            else if (flag_rx_over && flag_ip_proto[0])      split_next  =   ICMP_DATA;
+                            else if (flag_rx_over && flag_ip_proto[1])      split_next  =   UDP_HEAD;
                             else                                            split_next  =   IP_HEAD;
 
             UDP_HEAD    :   if      (flag_err_frame)                        split_next  =   IDLE;
@@ -132,6 +135,7 @@
                             flag_rx_over    <=  1;
                             length_cnt      <=  0;
                             net_rready_o    <=  0;
+                            flag_eth_type   <=  {(eth_type == IP_TYPE),(eth_type == ARP_TYPE)};
                             flag_err_frame  <=  (eth_da_mac != LOCAL_MAC) & (eth_da_mac != GLOBAL_MAC);
                         end
                         else begin
@@ -151,6 +155,7 @@
                             flag_rx_over    <=  1;
                             length_cnt      <=  0;
                             net_rready_o    <=  0;
+                            flag_ip_proto   <=  {(ip_proto == UDP_PROTO),(ip_proto == ICMP_PROTO)};
                             flag_err_frame  <=  !(ip_da_ip == LOCAL_IP) || (ip_rx_checksum != ~(ip_checksum[31:16] + ip_checksum[15:0]));
                         end
                         else begin
@@ -303,9 +308,13 @@
 
                 //  pseudo header is calculated in this part
                 case (length_cnt)
-                    8'd2    :   udp_checksum   <=  udp_checksum + udp_sum_data + ip_sa_ip[31:16] + ip_sa_ip[15:0];
-                    8'd4    :   udp_checksum   <=  udp_checksum + udp_sum_data + ip_da_ip[31:16] + ip_da_ip[15:0];
-                    8'd6    :   udp_checksum   <=  udp_checksum + udp_sum_data + udp_sum_data;
+                    8'd1    :   udp_checksum   <=  udp_checksum + ip_sa_ip[31:16];
+                    8'd2    :   udp_checksum   <=  udp_checksum + udp_sum_data;     // + ip_sa_ip[31:16] + ip_sa_ip[15:0];  
+                    8'd3    :   udp_checksum   <=  udp_checksum + ip_sa_ip[15:0];
+                    8'd4    :   udp_checksum   <=  udp_checksum + udp_sum_data;     // + ip_da_ip[31:16] + ip_da_ip[15:0]; 
+                    8'd5    :   udp_checksum   <=  udp_checksum + ip_da_ip[31:16];
+                    8'd6    :   udp_checksum   <=  udp_checksum + udp_length + udp_length;
+                    8'd7    :   udp_checksum   <=  udp_checksum + ip_da_ip[15:0];
                     8'd8    :   udp_checksum   <=  udp_checksum + {8'h00,8'h11};
                     default :   udp_checksum   <=  udp_checksum;
                 endcase    
@@ -319,6 +328,7 @@
                     udp_data_length-1 : udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data + {net_rdata_in, 8'h00}) : (udp_checksum + {udp_sum_data[7:0], net_rdata_in});                                       
                     default :           udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data) : udp_checksum; 
                 endcase
+
             end // UDP_DATA    
                 
             default : begin
@@ -368,7 +378,7 @@
             UDP_DATA    : begin
                 udp_rdata     <=  net_rdata_in;
                 udp_rvalid    <=  net_rvalid_in & net_rready_out;
-                udp_rlast     <=  (length_cnt == udp_data_length-1);
+                udp_rlast     <=  (length_cnt == udp_data_length-1);    //  udp_data_length-1
                 udp_fifo_rstn <=  !flag_err_frame;
             end // UDP_DATA    
             default : begin
