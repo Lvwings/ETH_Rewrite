@@ -10,6 +10,7 @@
  -----------------------------------------------------------------------------*/
 
  module mac_rx_crc_verify #(
+    parameter       LOCAL_IP    =   32'hC0A8_006E,
     parameter       LOCAL_MAC   =   48'hABCD_1234_5678
     )
     (
@@ -27,7 +28,7 @@
     output              mac_rvalid_out,
     input               mac_rready_in,
     output              mac_rlast_out,
-    output  [1:0]       mac_rtype_out
+    output  [2:0]       mac_rtype_out       //  3'b100 ICMP, 3'b010 UDP, 3'b001 ARP
  );
 /*------------------------------------------------------------------------------
 --  logic reset cdc
@@ -62,11 +63,11 @@
 /*------------------------------------------------------------------------------
 --  ETH preamble+SFD detect
 ------------------------------------------------------------------------------*/
-    localparam          PREAMBLE        =   64'h5555_5555_5555_55D5;
-    reg         [63:0]  preamble_reg    =   '0;
-    wire                trig_crc_start;
+    localparam      PREAMBLE            =   64'h5555_5555_5555_55D5;
+    logic [63:0]    preamble_reg        =   '0;
+    logic           trig_crc_start;
 
-    always_ff @(posedge phy_rx_clk) begin 
+    always_ff @(posedge phy_rx_clk) begin               
         if (phy_rvalid_d4)
             preamble_reg    <=  {preamble_reg[55:0],phy_rxd_d4};
         else
@@ -78,7 +79,7 @@
 /*------------------------------------------------------------------------------
 --  crc state parameter
 ------------------------------------------------------------------------------*/
-    typedef enum  {IDLE,ETH_HEAD,CRC}    state_r;
+    typedef enum  {IDLE,ETH_HEAD,IP_HEAD,UDP_HEAD,UDP_DATA,PADDING,CRC}    state_r;
     (* fsm_encoding = "one-hot" *) state_r rcrc_state,rcrc_next;
 
     always_ff @(posedge phy_rx_clk) begin 
@@ -95,16 +96,46 @@
     localparam  ARP_TYPE        =   16'h0806;
     localparam  IP_TYPE         =   16'h0800;
     localparam  ETH_HEAD_LENGTH =   8'd14;
+
+    localparam  UDP_PROTO       =   8'h11;
+    localparam  ICMP_PROTO      =   8'h01;
+
+    localparam  IP_HEAD_LENGTH  =   8'd20;    
+    localparam  UDP_HEAD_LENGTH =   8'd8;
+    localparam  UDP_MIN_LENGTH  =   8'd26;  //  UDP_HEAD_LENGTH + MIN_DATA_LENGTH
+
 /*------------------------------------------------------------------------------
---  ETH head check
+--  receive phy frame
 ------------------------------------------------------------------------------*/
-    logic   [7:0]   length_cnt      =   '0;
+    logic   [15:0]  length_cnt      =   '0;
     logic   [47:0]  eth_da_mac      =   '0;
     logic           flag_rx_over    =   '0;
     logic           flag_err_frame  =   '0;
 
+    logic   [7:0]   ip_proto        =   '0;
+    logic   [15:0]  ip_rx_checksum  =   '0;
+    logic   [31:0]  ip_checksum     =   '0;     //  for calcualte   
+    logic   [31:0]  ip_da_ip        =   '0; 
+    logic   [31:0]  ip_sa_ip        =   '0; 
+    logic   [1:0]   flag_ip_proto   =   '0; 
+
+    logic   [15:0]  udp_length      =   '0;  
+    logic   [15:0]  udp_data_length =   '0;   
+    logic   [15:0]  udp_rx_checksum =   '0;   
+    logic   [31:0]  udp_checksum    =   '0;
+    logic           flag_padding    =   '0;     
+
+    logic   [7:0]   phy_rxd_d5      =   '0;    
+    logic           phy_rvalid_d5   =   '0; 
+
     always_ff @(posedge phy_rx_clk) begin
+        phy_rvalid_d5   <= phy_rvalid_d4;
+        phy_rxd_d5      <= phy_rxd_d4;     
+           
         case (rcrc_next)
+        /*------------------------------------------------------------------------------
+        --  ETH head check
+        ------------------------------------------------------------------------------*/            
             ETH_HEAD    : begin
                         if (length_cnt == ETH_HEAD_LENGTH-1) begin
                             flag_rx_over    <=  1;
@@ -120,14 +151,171 @@
                                 eth_da_mac                          <=  eth_da_mac;                           
                         end
             end // ETH_HEAD       
+        /*------------------------------------------------------------------------------
+        --  IP head
+        ------------------------------------------------------------------------------*/
+            IP_HEAD     : begin
+                if (length_cnt == IP_HEAD_LENGTH) begin
+                    flag_rx_over    <=  1;
+                    length_cnt      <=  0;
+                    flag_ip_proto   <=  {(ip_proto == UDP_PROTO),(ip_proto == ICMP_PROTO)};
+                    flag_err_frame  <=  !(ip_da_ip == LOCAL_IP) || (ip_rx_checksum != ~(ip_checksum[31:16] + ip_checksum[15:0]));
+                end
+                else begin
+                    flag_rx_over    <=  0;
+                    length_cnt      <=  length_cnt + 1;
+
+                    case (length_cnt)
+                        16'd9    :   ip_proto              <=  phy_rxd_d4;
+                        16'd10   :   ip_rx_checksum[15:08] <=  phy_rxd_d4;
+                        16'd11   :   ip_rx_checksum[07:00] <=  phy_rxd_d4;
+                        16'd12   :   ip_sa_ip[31:24]       <=  phy_rxd_d4;
+                        16'd13   :   ip_sa_ip[23:16]       <=  phy_rxd_d4;
+                        16'd14   :   ip_sa_ip[15:08]       <=  phy_rxd_d4;
+                        16'd15   :   ip_sa_ip[07:00]       <=  phy_rxd_d4;                                   
+                        16'd16   :   ip_da_ip[31:24]       <=  phy_rxd_d4;
+                        16'd17   :   ip_da_ip[23:16]       <=  phy_rxd_d4;
+                        16'd18   :   ip_da_ip[15:08]       <=  phy_rxd_d4;
+                        16'd19   :   ip_da_ip[07:00]       <=  phy_rxd_d4;                                                     
+                        default :   begin
+                                    ip_proto              <=  ip_proto;
+                                    ip_sa_ip              <=  ip_sa_ip;
+                                    ip_da_ip              <=  ip_da_ip;
+                                    ip_rx_checksum        <=  ip_rx_checksum;
+                        end // default 
+                    endcase                           
+                end                        
+            end // IP_HEAD 
+        /*------------------------------------------------------------------------------
+        --  UDP DATA
+        ------------------------------------------------------------------------------*/
+            UDP_HEAD    :   begin
+                        if (length_cnt == UDP_HEAD_LENGTH) begin
+                            flag_rx_over    <=  1;
+                            length_cnt      <=  1;
+                            flag_padding    <=  udp_length < UDP_MIN_LENGTH;
+                            udp_data_length <=  udp_length - UDP_HEAD_LENGTH;
+                        end
+                        else begin
+                            flag_rx_over    <=  0;
+                            length_cnt      <=  length_cnt + 1; 
+
+                            case (length_cnt)
+                                16'd4    :   udp_length[15:8]        <=  phy_rxd_d5;   
+                                16'd5    :   udp_length[07:0]        <=  phy_rxd_d5;
+                                16'd6    :   udp_rx_checksum[15:8]   <=  phy_rxd_d5;
+                                16'd7    :   udp_rx_checksum[07:0]   <=  phy_rxd_d5;
+                                default :   begin
+                                            udp_length              <=  udp_length;
+                                            udp_rx_checksum         <=  udp_rx_checksum;
+                                end 
+                            endcase
+                        end
+            end // UDP_HEAD
+
+            UDP_DATA    :   begin
+                        if (length_cnt == udp_data_length) begin
+                            flag_rx_over    <=  1;
+                            length_cnt      <=  0;
+                            flag_err_frame  <=  (udp_rx_checksum != ~(udp_checksum[31:16] + udp_checksum[15:0]));
+                        end
+                        else begin
+                            flag_rx_over    <=  0;
+                            length_cnt      <=  length_cnt + 1;                             
+                        end
+            end // UDP_DATA 
             default : begin
-                length_cnt      <=   '0;
-                eth_da_mac      <=   '0;  
-                flag_rx_over    <=   '0;
-                flag_err_frame  <=   '0;                             
+                        length_cnt      <=  '0;
+                        eth_da_mac      <=  '0;  
+                        flag_rx_over    <=  '0;
+                        flag_err_frame  <=  '0;
+                        ip_da_ip        <=  '0;
+                        ip_sa_ip        <=  '0;
+                        ip_proto        <=  '0;
+                        ip_rx_checksum  <=  '0; 
+                        udp_length      <=  '0;
+                        udp_data_length <=  '0;
+                        udp_rx_checksum <=  '0; 
+                        flag_padding    <=  '0;                                                                          
             end // default 
         endcase
     end
+
+/*------------------------------------------------------------------------------
+--  ip check sum
+------------------------------------------------------------------------------*/
+
+    logic   [15:0]  ip_sum_data    =   '0;
+
+    always_ff @(posedge phy_rx_clk) begin 
+        case (rcrc_next)
+            IP_HEAD : begin
+                case (length_cnt)
+                    //  when receive ip head, set ip check sum to 0
+                    16'h0A,16'h0B :   begin 
+                                    ip_sum_data <=  '0;
+                                    ip_checksum <=  !length_cnt[0] ? (ip_checksum + ip_sum_data) : ip_checksum;
+                    end 
+                    //  ip_checksum is rewrited to reduce 1 clk
+                    IP_HEAD_LENGTH-1:   begin
+                                    ip_sum_data <=  '0;
+                                    ip_checksum <=  ip_checksum + {ip_sum_data[7:0], phy_rxd_d4};
+                    end
+                    default : begin
+                                    ip_sum_data <=  phy_rvalid_d4  ? {ip_sum_data[7:0], phy_rxd_d4} : ip_sum_data;
+                                    ip_checksum <=  !length_cnt[0] ? (ip_checksum + ip_sum_data) : ip_checksum;
+                    end       
+                endcase
+            end // IP_HEAD 
+            default : begin
+                ip_sum_data <=   '0;
+                ip_checksum <=   '0;
+            end // default 
+        endcase
+    end  
+
+/*------------------------------------------------------------------------------
+--  udp check sum
+    check range : pseudo header + udp header + data
+
+    pseudo header
+    source ip (4 octets) destination ip (4 octets) 0 (1 octet) 11 (1 octet) udp length (2 octet)
+------------------------------------------------------------------------------*/
+    logic   [15:0]  udp_sum_data    =   '0;
+
+    always_ff @(posedge phy_rx_clk) begin 
+        case (rcrc_next)
+            UDP_HEAD    : begin
+                udp_sum_data    <=  {udp_sum_data[7:0], phy_rxd_d5};
+
+                //  pseudo header is calculated in this part
+                case (length_cnt)
+                    16'd1    :   udp_checksum   <=  udp_checksum + ip_sa_ip[31:16];
+                    16'd2    :   udp_checksum   <=  udp_checksum + udp_sum_data;     // + ip_sa_ip[31:16] + ip_sa_ip[15:0];  
+                    16'd3    :   udp_checksum   <=  udp_checksum + ip_sa_ip[15:0];
+                    16'd4    :   udp_checksum   <=  udp_checksum + udp_sum_data;     // + ip_da_ip[31:16] + ip_da_ip[15:0]; 
+                    16'd5    :   udp_checksum   <=  udp_checksum + ip_da_ip[31:16];
+                    16'd6    :   udp_checksum   <=  udp_checksum + udp_length + udp_length;
+                    16'd7    :   udp_checksum   <=  udp_checksum + ip_da_ip[15:0];
+                    16'd8    :   udp_checksum   <=  udp_checksum + {8'h00,8'h11};
+                    default :   udp_checksum   <=  udp_checksum;
+                endcase    
+            end // UDP_HEAD   
+
+            UDP_DATA    : begin
+                udp_sum_data    <=  {udp_sum_data[7:0], phy_rxd_d5};
+
+                //  if udp data length is odd, {8'h00} should be added behind data to make up 16-bit. 
+                if (length_cnt == (udp_data_length-1))  udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data + {phy_rxd_d5, 8'h00}) : (udp_checksum + {udp_sum_data[7:0], phy_rxd_d5});                                       
+                else                                    udp_checksum   <=  !length_cnt[0] ? (udp_checksum + udp_sum_data) : udp_checksum; 
+            end // UDP_DATA    
+                
+            default : begin
+                udp_checksum    <=  '0;
+                udp_sum_data    <=  '0;
+            end // default 
+        endcase
+    end          
 /*------------------------------------------------------------------------------
 --  crc calculate
 ------------------------------------------------------------------------------*/
@@ -137,25 +325,21 @@
     logic               crc_last        =   '0;
     logic               crc_rst         =   '0;
     logic               phy_rvalid_d1   =   '0;
-    logic       [7:0]   phy_rxd_d5      =   '0;    
-    logic               phy_rvalid_d5   =   '0; 
 
     always_ff @(posedge phy_rx_clk) begin 
         phy_rvalid_d1   <= phy_rvalid_in;
-        phy_rvalid_d5   <= phy_rvalid_d4;
-        phy_rxd_d5      <= phy_rxd_d4;
 
         case (rcrc_next)
-            ETH_HEAD,CRC     : begin
+            IDLE     : begin
+                    crc_data  <= 0;
+                    crc_valid <= 0;
+                    crc_last  <= 0;               
+            end //    
+            default : begin
                     crc_valid <= phy_rvalid_d1 && phy_rvalid_d5 && !trig_crc_start;
                     crc_data  <= phy_rxd_d5;   
                     crc_last  <= phy_rvalid_d1 && !phy_rvalid_in;               
-            end // CRC     
-            default : begin
-                    crc_data  <= 0;
-                    crc_valid <= 0;
-                    crc_last  <= 0;
-                end
+            end
         endcase 
     end
 
@@ -222,44 +406,72 @@
 
     always_comb begin 
         case (rcrc_state)
-            IDLE    :                                           rcrc_next = trig_crc_start ? ETH_HEAD : IDLE;
+            IDLE    :                                                   rcrc_next = trig_crc_start ? ETH_HEAD : IDLE;
+            
+            ETH_HEAD:   if      (flag_err_frame)                        rcrc_next = IDLE;                                         
+                        else if (flag_rx_over && mac_rtype[1])           rcrc_next = IP_HEAD;
+                        else if (flag_rx_over && mac_rtype[0])           rcrc_next = CRC;
+                        else                                            rcrc_next = ETH_HEAD;
 
-            ETH_HEAD:   if      (flag_err_frame)                rcrc_next = IDLE;                                         
-                        else if (flag_rx_over)                  rcrc_next = CRC;
-                        else                                    rcrc_next = ETH_HEAD;
-                            
-            CRC     :   if (trig_crc_reset || flag_good_crc)    rcrc_next = IDLE;                            
-                        else                                    rcrc_next = CRC;                            
+            IP_HEAD :   if      (flag_err_frame)                        rcrc_next = IDLE;
+                        else if (flag_rx_over && flag_ip_proto[1])       rcrc_next = UDP_HEAD;
+                        else if (flag_rx_over && flag_ip_proto[0])       rcrc_next = CRC;
+                        else if (flag_rx_over)                          rcrc_next = IDLE;
+                        else                                            rcrc_next = IP_HEAD;
 
-            default :                                           rcrc_next = IDLE;
+            UDP_HEAD:   if      (flag_err_frame)                        rcrc_next =  IDLE;
+                        else if (flag_rx_over)                          rcrc_next =  UDP_DATA;
+                        else                                            rcrc_next =  UDP_HEAD;
+    
+            UDP_DATA:   if      (flag_err_frame)                        rcrc_next =  IDLE;
+                        else if (flag_rx_over && flag_padding)          rcrc_next =  PADDING;
+                        else if (flag_rx_over)                          rcrc_next =  IDLE;
+                            else                                        rcrc_next =  UDP_DATA;
+
+            PADDING :                                                   rcrc_next =  !phy_rvalid_in ? CRC : PADDING;                                   
+
+            CRC     :   if (trig_crc_reset || flag_good_crc)            rcrc_next = IDLE;                            
+                        else                                            rcrc_next = CRC;                            
+        
+            default :                                                   rcrc_next = IDLE;
         endcase    
     end
 /*------------------------------------------------------------------------------
 --  mac recive phy data fifo
 ------------------------------------------------------------------------------*/
-    logic   [1:0]   mac_rtype     =   '0;
-    logic           mac_rvalid    =   '0;
-
+    logic   [2:0]   mac_rtype   =   '0;
+    logic   [7:0]   mac_rdata   =   '0;
+    logic           mac_rvalid  =   '0;
+    logic           mac_rlast   =   '0;
 
     always_ff @(posedge phy_rx_clk) begin 
-        if (length_cnt == ETH_HEAD_LENGTH-1)  
-            mac_rtype     <=  {({phy_rxd_d5, phy_rxd_d4} == IP_TYPE),({phy_rxd_d5, phy_rxd_d4} == ARP_TYPE)};
-        else if (rcrc_next == IDLE)
-            mac_rtype     <=  '0;
+        if (length_cnt == ETH_HEAD_LENGTH-1 && rcrc_state == ETH_HEAD)  
+            mac_rtype     <=    {1'b0,({phy_rxd_d5, phy_rxd_d4} == IP_TYPE),({phy_rxd_d5, phy_rxd_d4} == ARP_TYPE)};
+        else if (flag_rx_over & rcrc_state == IP_HEAD)
+            mac_rtype     <=    {flag_ip_proto[0], flag_ip_proto[1], 1'b0};
+        else if (rcrc_state == IDLE)
+            mac_rtype     <=    '0;
         else 
-            mac_rtype     <=  mac_rtype;
-
-        mac_rvalid  <=  (rcrc_state == CRC);
+            mac_rtype     <=    mac_rtype;
     end
+
+    state_r rcrc_state_d;
+
+    always_ff @(posedge phy_rx_clk) begin 
+        rcrc_state_d<=  rcrc_state;
+        mac_rdata   <=  crc_data;
+        mac_rvalid  <=  ((rcrc_next == UDP_DATA) || (rcrc_state_d == CRC && !mac_rtype[1])) & crc_valid;
+        mac_rlast   <=  (rcrc_state == UDP_DATA && length_cnt == udp_data_length) || (crc_last && !mac_rtype[1]);   
+    end    
 
  mac_rx_fifo mac_rx_fifo (
   .s_axis_aresetn   (fifo_reset_n),     // input wire s_axis_aresetn
 
   .s_axis_aclk      (phy_rx_clk),       // input wire s_axis_aclk
-  .s_axis_tvalid    (crc_valid & mac_rvalid),        // input wire s_axis_tvalid
+  .s_axis_tvalid    (mac_rvalid),        // input wire s_axis_tvalid
   .s_axis_tready    (),                 // output wire s_axis_tready
-  .s_axis_tdata     (crc_data),         // input wire [7 : 0] s_axis_tdata
-  .s_axis_tlast     (crc_last),         // input wire s_axis_tlast
+  .s_axis_tdata     (mac_rdata),         // input wire [7 : 0] s_axis_tdata
+  .s_axis_tlast     (mac_rlast),         // input wire s_axis_tlast
   .s_axis_tuser     (mac_rtype),      // input wire [1 : 0] s_axis_tuser
 
   .m_axis_aclk      (logic_clk),        // input wire m_axis_aclk

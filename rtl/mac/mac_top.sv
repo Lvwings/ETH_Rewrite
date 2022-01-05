@@ -27,7 +27,7 @@
     output          mac_rvalid_out,
     input           mac_rready_in,
     output          mac_rlast_out,
-    output  [1:0]   mac_rtype_out,   
+    output  [2:0]   mac_rtype_out,   
 
     // mac tx data in
     input   [7:0]   mac_tdata_in,

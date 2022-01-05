@@ -71,11 +71,11 @@ module tb_eth_top ();
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
             .mdio             (mdio),
             .mdio_clk_out     (mdio_clk_out),
-            .mdio_rstn_out    (mdio_rstn_out),
-            .udp_rdata_out    (udp_rdata_out),
-            .udp_rvalid_out   (udp_rvalid_out),
-            .udp_rready_in    (udp_rready_in),
-            .udp_rlast_out    (udp_rlast_out)
+            .mdio_rstn_out    (mdio_rstn_out)
+          //.udp_rdata_out    (udp_rdata_out),
+          //.udp_rvalid_out   (udp_rvalid_out),
+          //.udp_rready_in    (udp_rready_in),
+          //.udp_rlast_out    (udp_rlast_out)
         );
 
 
@@ -127,18 +127,20 @@ module tb_eth_top ();
         initial begin
             $readmemh(UDP_FLIE_PATH,data_ram);
         end        
-    `elsif TEST_ARP
+    `else
         localparam      DATA_LENGTH =   ARP_DATA_LENGTH;
         logic   [7:0]   data_ram    [DATA_LENGTH-1 : 0];
 
         initial begin
             $readmemh(ARP_FLIE_PATH,data_ram);
+        end
     `endif
+
     /*------------------------------------------------------------------------------
     --  rgmii data
     ------------------------------------------------------------------------------*/
     localparam  DATA_DELAY  = 32;
-    reg [7:0]   rxc_cnt     = 0;
+    logic [7:0] rxc_cnt     = '0;
 
     always_ff @(posedge rgmii_rxc_2x) begin 
         rxc_cnt <= rxc_cnt + 1;

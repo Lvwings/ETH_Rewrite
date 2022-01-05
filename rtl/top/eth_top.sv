@@ -44,13 +44,10 @@ module eth_top #(
 
         inout               mdio,
         output              mdio_clk_out,
-        output              mdio_rstn_out,
+        output              mdio_rstn_out
     //  The following ports are the internal connections from ETH module to others logic module
         //  udp rx data out
-        output  [7:0]   udp_rdata_out,
-        output          udp_rvalid_out,
-        input           udp_rready_in,
-        output          udp_rlast_out
+
 );
 
         logic              clk_locked;
@@ -75,7 +72,13 @@ module eth_top #(
         logic              mac_rvalid;
         logic              mac_rready;
         logic              mac_rlast;   
-        logic  [1:0]       mac_rtype;
+        logic  [2:0]       mac_rtype;
+
+        logic  [7:0]       udp_rdata_out;
+        logic              udp_rvalid_out;
+        logic              udp_rready_in    =   '1;
+        logic              udp_rlast_out;
+
        
 /*------------------------------------------------------------------------------
 --  clock generate
