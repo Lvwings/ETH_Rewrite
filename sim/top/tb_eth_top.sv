@@ -118,7 +118,7 @@ module tb_eth_top ();
     localparam  UDP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/top/sim_udp_data.txt";
     localparam  UDP_DATA_LENGTH =   72;
 
-    `define TEST_UDP
+    `define TEST_ARP
 
     `ifdef TEST_UDP
         localparam      DATA_LENGTH =   UDP_DATA_LENGTH;

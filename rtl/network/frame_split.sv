@@ -22,7 +22,7 @@
     input           net_rvalid_in,
     output          net_rready_out,
     input           net_rlast_in, 
-    input   [2:0]   net_rtype_in,       //  2'b01 ARP 2'b10 IP 
+    input   [2:0]   net_rtype_in,       //  3'b100 ICMP, 3'b010 UDP, 3'b001 ARP
 
     //  arp rx data out
     output  [7:0]   arp_rdata_out,
@@ -37,15 +37,9 @@
     output          udp_rlast_out   
  );
 
- /*------------------------------------------------------------------------------
- --  eth frame paramter
- ------------------------------------------------------------------------------*/
-
-
 /*------------------------------------------------------------------------------
 --  state
-------------------------------------------------------------------------------*/
-    
+------------------------------------------------------------------------------*/   
     typedef enum {IDLE,UDP_DATA,ICMP_DATA,ARP_DATA} state_f;
     (* fsm_encoding = "one-hot" *) state_f split_state,split_next;
 
@@ -59,10 +53,7 @@
 
 /*------------------------------------------------------------------------------
 --  state jump
-------------------------------------------------------------------------------*/
-    logic               flag_err_frame      =   '0;
-    logic               flag_rx_over        =   '0;
-    
+------------------------------------------------------------------------------*/ 
     logic               trig_split_start    =   '0;
     logic               net_rvalid_d        =   '0;
 
@@ -78,12 +69,9 @@
                             else if (trig_split_start && net_rtype_in[2])   split_next  =   ICMP_DATA;
                             else                                            split_next  =   IDLE;            
 
-            ICMP_DATA   :   if      (flag_err_frame)                        split_next  =   IDLE;                                   
-                            else if (flag_rx_over)                          split_next  =   IDLE;
-                            else                                            split_next  =   ICMP_DATA;  
-
-            ARP_DATA    :   if      (flag_rx_over)                          split_next  =   IDLE;                                                                   
-                            else                                            split_next  =   ARP_DATA;    
+            ICMP_DATA   :                                                   split_next  =   net_rlast_in ? IDLE : ICMP_DATA;  
+                            
+            ARP_DATA    :                                                   split_next  =   net_rlast_in ? IDLE : ARP_DATA;  
             
             UDP_DATA     :                                                  split_next  =   net_rlast_in ? IDLE : UDP_DATA;                   
             default :                                                       split_next  =   IDLE;
@@ -93,33 +81,20 @@
 /*------------------------------------------------------------------------------
 --  rx mac data
 ------------------------------------------------------------------------------*/
-    logic   [7:0]   length_cnt      =   '0;
     logic           net_rready_o    =   '0;   
-    logic           udp_rready;
 
     always_ff @(posedge logic_clk) begin 
        case (split_next)
             ARP_DATA    :   begin
-                        if (net_rlast_in) begin
-                            flag_rx_over    <=  1;
-                            net_rready_o    <=  0;
-                        end
-                        else begin
-                            flag_rx_over    <=  0;
-                            net_rready_o    <=  net_rvalid_in;
-                        end                
+                        net_rready_o    <=  net_rvalid_in & arp_rready_in & !net_rlast_in;                
             end // ARP_DATA   
 
             UDP_DATA    :  begin
-                        net_rready_o    <=  net_rvalid_in & !net_rlast_in;
+                        net_rready_o    <=  net_rvalid_in & udp_rready_in & !net_rlast_in;
             end 
    
            default : begin
-                        length_cnt      <=  '0;
-                        flag_rx_over    <=  '0;
-                        flag_err_frame  <=  '0;
                         net_rready_o    <=  '0;
-
            end
        endcase
     end
@@ -134,9 +109,9 @@
     logic           arp_rlast_o     =   '0;
 
     always_ff @(posedge logic_clk) begin 
-        case (split_next)
+        case (split_state)
             ARP_DATA    :   begin
-                        arp_rvalid_o    <=  1;
+                        arp_rvalid_o    <=  net_rvalid_in;
                         arp_rdata_o     <=  net_rdata_in;
                         arp_rlast_o     <=  net_rlast_in;   
             end // ARP_DATA  
@@ -159,25 +134,26 @@
     logic   [7:0]   udp_rdata     =   '0;
     logic           udp_rvalid    =   '0;
     logic           udp_rlast     =   '0;
-    logic           udp_fifo_rstn =   '1;
 
     always_ff @(posedge logic_clk) begin 
         case (split_state)
             UDP_DATA    : begin
                 udp_rdata     <=  net_rdata_in;
                 udp_rvalid    <=  net_rvalid_in & net_rready_out;
-                udp_rlast     <=  net_rlast_in;    //  udp_data_length-1
-                udp_fifo_rstn <=  !flag_err_frame;
+                udp_rlast     <=  net_rlast_in; 
             end // UDP_DATA    
             default : begin
                 udp_rdata     <=  '0;
                 udp_rvalid    <=  '0;
-                udp_rlast     <=  '0;
-                udp_fifo_rstn <=  !logic_rst;                
+                udp_rlast     <=  '0;            
             end // default 
         endcase
-    end       
+    end   
 
+    assign      udp_rdata_out   =   udp_rdata;
+    assign      udp_rvalid_out  =   udp_rvalid;
+    assign      udp_rlast_out   =   udp_rlast;    
+/*
 udp_rx_fifo udp_rx_fifo (
   .s_axis_aresetn   (udp_fifo_rstn),  // input wire s_axis_aresetn
   .s_axis_aclk      (logic_clk),        // input wire s_axis_aclk
@@ -191,5 +167,5 @@ udp_rx_fifo udp_rx_fifo (
   .m_axis_tready    (udp_rready_in),    // input wire m_axis_tready
   .m_axis_tdata     (udp_rdata_out),      // output wire [7 : 0] m_axis_tdata
   .m_axis_tlast     (udp_rlast_out)      // output wire m_axis_tlast
-);
+);*/
  endmodule : frame_split
