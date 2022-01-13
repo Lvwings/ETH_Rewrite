@@ -112,18 +112,18 @@ module tb_eth_top ();
     --  initial test data
     ------------------------------------------------------------------------------*/
     localparam  ARP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
-    localparam  UDP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/top/sim_udp_data.txt";
+    localparam  UDP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/top/sim_udp_data_ab16.txt";
 
-    localparam  DATA_LENGTH =   72;
+    localparam  ARP_DATA_LENGTH =   72;
+    localparam  UDP_DATA_LENGTH =   80;
 
-
-        logic   [7:0]   udp_ram    [DATA_LENGTH-1 : 0];
+        logic   [7:0]   udp_ram    [UDP_DATA_LENGTH-1 : 0];
 
         initial begin
             $readmemh(UDP_FLIE_PATH,udp_ram);
         end        
 
-        logic   [7:0]   arp_ram    [DATA_LENGTH-1 : 0];
+        logic   [7:0]   arp_ram    [ARP_DATA_LENGTH-1 : 0];
 
         initial begin
             $readmemh(ARP_FLIE_PATH,arp_ram);
@@ -145,7 +145,7 @@ module tb_eth_top ();
             flag_arp    <=  flag_arp;
 
         if (flag_arp[3]) begin
-            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
+            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + ARP_DATA_LENGTH)*2) begin
                 rgmii_rxd_in    <= rxc_cnt[0] ? arp_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : arp_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];
                 rgmii_rx_ctl_in <= 1;
             end
@@ -155,7 +155,7 @@ module tb_eth_top ();
             end            
         end // if (flag_arp[3])
         else begin
-            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
+            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + UDP_DATA_LENGTH)*2) begin
                 rgmii_rxd_in    <= rxc_cnt[0] ? udp_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : udp_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];
                 rgmii_rx_ctl_in <= 1;
             end
