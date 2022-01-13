@@ -34,14 +34,24 @@ module tb_net_top (); /* this is automatically generated */
 
     logic        logic_clk;
     logic        logic_rst;
-    logic  [7:0] net_rdata_in;
-    logic        net_rvalid_in;
-    logic        net_rready_out;
-    logic        net_rlast_in;
-    logic  [7:0] net_tdata_out;
-    logic        net_tvalid_out;
-    logic        net_tready_in;
-    logic        net_tlast_out;
+    logic  [7:0] net_rmac_data_in;
+    logic        net_rmac_valid_in;
+    logic        net_rmac_ready_out;
+    logic        net_rmac_last_in;
+    logic [34:0] net_rmac_type_in;
+    logic  [7:0] net_tmac_data_out;
+    logic        net_tmac_valid_out;
+    logic        net_tmac_ready_in;
+    logic        net_tmac_last_out;
+    logic  [7:0] net_rtrans_data_in;
+    logic        net_rtrans_valid_in;
+    logic        net_rtrans_ready_out;
+    logic        net_rtrans_last_in;
+    logic  [7:0] udp_rdata_out;
+    logic        udp_rvalid_out;
+    logic        udp_rready_in;
+    logic        udp_rlast_out;
+    logic [31:0] udp_rip_out;
     logic        trig_arp_qvalid_in;
     logic [31:0] trig_arp_ip_in;
     logic        trig_arp_qready_out;
@@ -53,31 +63,36 @@ module tb_net_top (); /* this is automatically generated */
     logic        arp_response_ready_in;
     logic        arp_response_err_out;
 
-    net_top #(
+    net_tmac_op #(
             .LOCAL_IP(LOCAL_IP),
             .LOCAL_MAC(LOCAL_MAC)
-        ) inst_net_top (
+        ) inst_net_tmac_op (
             .logic_clk              (logic_clk),
             .logic_rst              (logic_rst),
-
-            .net_rdata_in           (net_rdata_in),
-            .net_rvalid_in          (net_rvalid_in),
-            .net_rready_out         (net_rready_out),
-            .net_rlast_in           (net_rlast_in),
-
-            .net_tdata_out          (net_tdata_out),
-            .net_tvalid_out         (net_tvalid_out),
-            .net_tready_in          (net_tready_in),
-            .net_tlast_out          (net_tlast_out),
-
+            .net_rmac_data_in       (net_rmac_data_in),
+            .net_rmac_valid_in      (net_rmac_valid_in),
+            .net_rmac_ready_out     (net_rmac_ready_out),
+            .net_rmac_last_in       (net_rmac_last_in),
+            .net_rmac_type_in       (net_rmac_type_in),
+            .net_tmac_data_out      (net_tmac_data_out),
+            .net_tmac_valid_out     (net_tmac_valid_out),
+            .net_tmac_ready_in      (net_tmac_ready_in),
+            .net_tmac_last_out      (net_tmac_last_out),
+            .net_rtrans_data_in     (net_rtrans_data_in),
+            .net_rtrans_valid_in    (net_rtrans_valid_in),
+            .net_rtrans_ready_out   (net_rtrans_ready_out),
+            .net_rtrans_last_in     (net_rtrans_last_in),
+            .udp_rdata_out          (udp_rdata_out),
+            .udp_rvalid_out         (udp_rvalid_out),
+            .udp_rready_in          (udp_rready_in),
+            .udp_rlast_out          (udp_rlast_out),
+            .udp_rip_out            (udp_rip_out),
             .trig_arp_qvalid_in     (trig_arp_qvalid_in),
             .trig_arp_ip_in         (trig_arp_ip_in),
             .trig_arp_qready_out    (trig_arp_qready_out),
-
             .arp_query_ip_in        (arp_query_ip_in),
             .arp_query_valid_in     (arp_query_valid_in),
             .arp_query_ready_out    (arp_query_ready_out),
-
             .arp_response_mac_out   (arp_response_mac_out),
             .arp_response_valid_out (arp_response_valid_out),
             .arp_response_ready_in  (arp_response_ready_in),
@@ -88,9 +103,9 @@ module tb_net_top (); /* this is automatically generated */
         assign  logic_rst   =   srstb;
 
     task init();
-        net_rdata_in          <= '0;
-        net_rvalid_in         <= '0;
-        net_rlast_in          <= '0;
+        net_rmac_data_in      <= '0;
+        net_rmac_valid_in     <= '0;
+        net_rmac_last_in      <= '0;
         trig_arp_qvalid_in    <= '0;
         trig_arp_ip_in        <= '0;
         arp_query_ip_in       <= '0;
@@ -136,11 +151,11 @@ module tb_net_top (); /* this is automatically generated */
                             else                                                        net_next = IDLE;
 
             MAC_QUERY   :   if      (arp_response_ready_in && !arp_response_err_out)    net_next = IDLE;
-                            else if (trig_arp_qvalid_in && net_tlast_out)               net_next = ARP_RESPONSE;
+                            else if (trig_arp_qvalid_in && net_tmac_last_out)               net_next = ARP_RESPONSE;
                             else                                                        net_next = MAC_QUERY;
 
-            ARP_QUERY   :   net_next    =   net_rlast_in ? IDLE : ARP_QUERY;
-            ARP_RESPONSE:   net_next    =   net_rlast_in ? IDLE : ARP_RESPONSE;
+            ARP_QUERY   :   net_next    =   net_rmac_last_in ? IDLE : ARP_QUERY;
+            ARP_RESPONSE:   net_next    =   net_rmac_last_in ? IDLE : ARP_RESPONSE;
             default :       net_next    =   IDLE;
         endcase
     end
@@ -172,26 +187,26 @@ module tb_net_top (); /* this is automatically generated */
     always_ff @(posedge logic_clk) begin 
         case (net_next)
             ARP_QUERY   : begin
-                        data_cnt        <= data_cnt + (net_rvalid_in & net_rready_out);
+                        data_cnt        <= data_cnt + (net_rmac_valid_in & net_rmac_ready_out);
 
-                        net_rvalid_in   <=  1;
+                        net_rmac_valid_in   <=  1;
 
-                        net_rdata_in    <=  net_rready_out ? query_ram[data_cnt+1] : query_ram[data_cnt];
-                        net_rlast_in    <=  (data_cnt == DATA_LENGTH-2);
+                        net_rmac_data_in    <=  net_rmac_ready_out ? query_ram[data_cnt+1] : query_ram[data_cnt];
+                        net_rmac_last_in    <=  (data_cnt == DATA_LENGTH-2);
             end
 
             ARP_RESPONSE    : begin
-                        data_cnt        <= data_cnt + (net_rvalid_in & net_rready_out);
+                        data_cnt        <= data_cnt + (net_rmac_valid_in & net_rmac_ready_out);
 
-                        net_rvalid_in   <=  1;
-                        net_rdata_in    <=  net_rready_out ? response_ram[data_cnt+1] : response_ram[data_cnt];
-                        net_rlast_in    <=  (data_cnt == DATA_LENGTH-2);                        
+                        net_rmac_valid_in   <=  1;
+                        net_rmac_data_in    <=  net_rmac_ready_out ? response_ram[data_cnt+1] : response_ram[data_cnt];
+                        net_rmac_last_in    <=  (data_cnt == DATA_LENGTH-2);                        
             end // ARP_RESPONSE    
             default : begin
                         data_cnt        <=  '0;
-                        net_rvalid_in   <=  '0;
-                        net_rdata_in    <=  '0;
-                        net_rlast_in    <=  '0;            
+                        net_rmac_valid_in   <=  '0;
+                        net_rmac_data_in    <=  '0;
+                        net_rmac_last_in    <=  '0;            
             end // default 
         endcase
     end
@@ -256,7 +271,7 @@ module tb_net_top (); /* this is automatically generated */
     end 
 
 /*------------------------------------------------------------------------------
--- net_tready_in
+-- net_tmac_ready_in
 ------------------------------------------------------------------------------*/
     logic   [5:0]   time_gap        =   '0;
     logic           flag_time_gap   =   '0;
@@ -264,7 +279,7 @@ module tb_net_top (); /* this is automatically generated */
     always_ff @(posedge logic_clk) begin 
         time_gap    <=  time_gap + flag_time_gap;
 
-        if (net_tlast_out)
+        if (net_tmac_last_out)
             flag_time_gap   <=  1;
         else if (time_gap == 6'h3F)
             flag_time_gap   <=  0;
@@ -272,9 +287,9 @@ module tb_net_top (); /* this is automatically generated */
             flag_time_gap   <=  flag_time_gap;
 
         if (flag_time_gap)
-            net_tready_in   <=  0;
+            net_tmac_ready_in   <=  0;
         else
-            net_tready_in   <=  net_tvalid_out & !net_tlast_out;
+            net_tmac_ready_in   <=  net_tmac_valid_out & !net_tmac_last_out;
     end
     
 

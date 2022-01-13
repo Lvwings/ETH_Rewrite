@@ -18,11 +18,11 @@
     input           logic_rst,   
  
      //  net rx data in  -> from mac
-    input   [7:0]   net_rdata_in,
-    input           net_rvalid_in,
-    output          net_rready_out,
-    input           net_rlast_in, 
-    input   [2:0]   net_rtype_in,       //  3'b100 ICMP, 3'b010 UDP, 3'b001 ARP
+    input   [7:0]   net_rmac_data_in,
+    input           net_rmac_valid_in,
+    output          net_rmac_ready_out,
+    input           net_rmac_last_in, 
+    input   [34:0]  net_rmac_type_in,       //  3'b100 ICMP, 3'b010 UDP, 3'b001 ARP
 
     //  arp rx data out
     output  [7:0]   arp_rdata_out,
@@ -34,7 +34,8 @@
     output  [7:0]   udp_rdata_out,
     output          udp_rvalid_out,
     input           udp_rready_in,
-    output          udp_rlast_out   
+    output          udp_rlast_out,
+    output  [31:0]  udp_rip_out   
  );
 
 /*------------------------------------------------------------------------------
@@ -55,51 +56,51 @@
 --  state jump
 ------------------------------------------------------------------------------*/ 
     logic               trig_split_start    =   '0;
-    logic               net_rvalid_d        =   '0;
+    logic               net_rmac_valid_d        =   '0;
 
     always_ff @(posedge logic_clk) begin
-        net_rvalid_d        <= net_rvalid_in;
-        trig_split_start    <= !net_rvalid_d & net_rvalid_in;
+        net_rmac_valid_d        <= net_rmac_valid_in;
+        trig_split_start    <= !net_rmac_valid_d & net_rmac_valid_in;
     end
     
     always_comb begin
         case (split_state)
-            IDLE        :   if      (trig_split_start && net_rtype_in[0])   split_next  =   ARP_DATA;
-                            else if (trig_split_start && net_rtype_in[1])   split_next  =   UDP_DATA;
-                            else if (trig_split_start && net_rtype_in[2])   split_next  =   ICMP_DATA;
-                            else                                            split_next  =   IDLE;            
-
-            ICMP_DATA   :                                                   split_next  =   net_rlast_in ? IDLE : ICMP_DATA;  
-                            
-            ARP_DATA    :                                                   split_next  =   net_rlast_in ? IDLE : ARP_DATA;  
-            
-            UDP_DATA     :                                                  split_next  =   net_rlast_in ? IDLE : UDP_DATA;                   
-            default :                                                       split_next  =   IDLE;
+            IDLE        :   if      (trig_split_start && net_rmac_type_in[0])   split_next  =   ARP_DATA;
+                            else if (trig_split_start && net_rmac_type_in[1])   split_next  =   UDP_DATA;
+                            else if (trig_split_start && net_rmac_type_in[2])   split_next  =   ICMP_DATA;
+                            else                                                split_next  =   IDLE;            
+    
+            ICMP_DATA   :                                                       split_next  =   net_rmac_last_in ? IDLE : ICMP_DATA;  
+                                
+            ARP_DATA    :                                                       split_next  =   arp_rlast_out ? IDLE : ARP_DATA;  
+                
+            UDP_DATA    :                                                       split_next  =   udp_rlast_out ? IDLE : UDP_DATA;                   
+            default :                                                           split_next  =   IDLE;
         endcase   
     end
 
 /*------------------------------------------------------------------------------
 --  rx mac data
 ------------------------------------------------------------------------------*/
-    logic           net_rready_o    =   '0;   
+    logic           net_rmac_ready_o    =   '0;   
 
     always_ff @(posedge logic_clk) begin 
        case (split_next)
             ARP_DATA    :   begin
-                        net_rready_o    <=  net_rvalid_in & arp_rready_in & !net_rlast_in;                
+                        net_rmac_ready_o    <=  net_rmac_valid_in & !net_rmac_last_in;                
             end // ARP_DATA   
 
             UDP_DATA    :  begin
-                        net_rready_o    <=  net_rvalid_in & udp_rready_in & !net_rlast_in;
+                        net_rmac_ready_o    <=  net_rmac_valid_in & udp_rready_in & !net_rmac_last_in;
             end 
    
            default : begin
-                        net_rready_o    <=  '0;
+                        net_rmac_ready_o    <=  '0;
            end
        endcase
     end
 
-    assign  net_rready_out  =   net_rready_o;
+    assign  net_rmac_ready_out  =   net_rmac_ready_o;
  
 /*------------------------------------------------------------------------------
 --  arp rx data 
@@ -109,11 +110,11 @@
     logic           arp_rlast_o     =   '0;
 
     always_ff @(posedge logic_clk) begin 
-        case (split_state)
+        case (split_next)
             ARP_DATA    :   begin
-                        arp_rvalid_o    <=  net_rvalid_in;
-                        arp_rdata_o     <=  net_rdata_in;
-                        arp_rlast_o     <=  net_rlast_in;   
+                        arp_rvalid_o    <=  net_rmac_valid_in;
+                        arp_rdata_o     <=  net_rmac_data_in;
+                        arp_rlast_o     <=  net_rmac_last_in;   
             end // ARP_DATA  
 
             default : begin
@@ -131,28 +132,32 @@
 /*------------------------------------------------------------------------------
 --  udp rx data
 ------------------------------------------------------------------------------*/
-    logic   [7:0]   udp_rdata     =   '0;
-    logic           udp_rvalid    =   '0;
-    logic           udp_rlast     =   '0;
+    logic   [7:0]   udp_rdata     = '0;
+    logic           udp_rvalid    = '0;
+    logic           udp_rlast     = '0;
+    logic   [31:0]  udp_rip       = '0;
 
     always_ff @(posedge logic_clk) begin 
-        case (split_state)
+        case (split_next)
             UDP_DATA    : begin
-                udp_rdata     <=  net_rdata_in;
-                udp_rvalid    <=  net_rvalid_in & net_rready_out;
-                udp_rlast     <=  net_rlast_in; 
+                udp_rdata  <=  net_rmac_data_in;
+                udp_rvalid <=  net_rmac_valid_in & net_rmac_ready_out;
+                udp_rlast  <=  net_rmac_last_in;
+                udp_rip    <=  net_rmac_type_in[34:3]; 
             end // UDP_DATA    
             default : begin
-                udp_rdata     <=  '0;
-                udp_rvalid    <=  '0;
-                udp_rlast     <=  '0;            
+                udp_rdata  <=  '0;
+                udp_rvalid <=  '0;
+                udp_rlast  <=  '0;    
+                udp_rip    <=  '0;        
             end // default 
         endcase
     end   
 
     assign      udp_rdata_out   =   udp_rdata;
     assign      udp_rvalid_out  =   udp_rvalid;
-    assign      udp_rlast_out   =   udp_rlast;    
+    assign      udp_rlast_out   =   udp_rlast;  
+    assign      udp_rip_out     =   udp_rip;  
 /*
 udp_rx_fifo udp_rx_fifo (
   .s_axis_aresetn   (udp_fifo_rstn),  // input wire s_axis_aresetn

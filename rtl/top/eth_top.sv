@@ -26,7 +26,9 @@ module eth_top #(
         // Use Fixed to fix the tap
         parameter IDELAY_TAP_OPTION = "Fixed" ,
         parameter LOCAL_IP          =   32'hC0A8_006E,
-        parameter LOCAL_MAC         =   48'h00D0_0800_0002                  
+        parameter LOCAL_MAC         =   48'h00D0_0800_0002,
+        parameter LOCAL_SP          =   16'd8080,
+        parameter LOCAL_DP          =   16'd8080                          
     )                                                   
     (
         input               extern_clk_in,          // Clock
@@ -63,21 +65,11 @@ module eth_top #(
         logic              phy_rready   =   '1;
         logic              phy_rerr;        //  user port
 
-        logic  [7:0]       mac_tdata;
-        logic              mac_tvalid;
-        logic              mac_tready;
-        logic              mac_tlast;        
-
-        logic  [7:0]       mac_rdata;
-        logic              mac_rvalid;
-        logic              mac_rready;
-        logic              mac_rlast;   
-        logic  [2:0]       mac_rtype;
-
-        logic  [7:0]       udp_rdata_out;
-        logic              udp_rvalid_out;
-        logic              udp_rready_in    =   '1;
-        logic              udp_rlast_out;
+        logic  [7:0]       udp_rdata;
+        logic              udp_rvalid;
+        logic              udp_rready;
+        logic              udp_rlast;
+        logic  [31:0]      udp_rip;
 
        
 /*------------------------------------------------------------------------------
@@ -109,23 +101,28 @@ module eth_top #(
         ) inst_phy_top (
             .clk_200m         (clk_200m),
             .sys_rst          (sys_rst),
+
             .rgmii_rxd_in     (rgmii_rxd_in),
             .rgmii_rxc_in     (rgmii_rxc_in),
             .rgmii_rx_ctl_in  (rgmii_rx_ctl_in),
+
             .rgmii_txd_out    (rgmii_txd_out),
             .rgmii_txc_out    (rgmii_txc_out),
             .rgmii_tx_ctl_out (rgmii_tx_ctl_out),
+
             .phy_tx_clk       (phy_tx_clk),
             .phy_tx_clk90     (phy_tx_clk90),
             .phy_txd_in       (phy_txd),
             .phy_tvalid_in    (phy_tvalid),
             .phy_tready_out   (phy_tready),
             .phy_terr_in      (phy_terr),
+
             .phy_rx_clk       (phy_rx_clk),
             .phy_rxd_out      (phy_rxd),
             .phy_rvalid_out   (phy_rvalid),
             .phy_rready_in    (phy_rready),
             .phy_rerr_out     (phy_rerr),
+
             .rgmii_clk_in     (rgmii_clk_in),
             .mdio             (mdio),
             .mdio_clk_out     (mdio_clk_out),
@@ -140,34 +137,38 @@ module eth_top #(
 /*------------------------------------------------------------------------------
 --  mac logic
 ------------------------------------------------------------------------------*/
+    logic   [7:0]   mac_tnet_data;
+    logic   [34:0]  mac_tnet_type;
+    logic   [7:0]   mac_rnet_data;
 
     mac_top #(
             .LOCAL_MAC(LOCAL_MAC)
-        )inst_mac_top(
-            .logic_clk      (logic_clk),
-            .logic_rst      (logic_rst),
+        ) inst_mac_top (
+            .logic_clk          (logic_clk),
+            .logic_rst          (logic_rst),
 
-            .phy_rx_clk     (phy_rx_clk),
-            .phy_rxd_in     (phy_rxd),
-            .phy_rvalid_in  (phy_rvalid),
-            .phy_rerr_in    (phy_rerr),
+            .mac_rphy_clk       (phy_rx_clk),
+            .mac_rphy_data_in   (phy_rxd),
+            .mac_rphy_valid_in  (phy_rvalid),
+            .mac_rphy_err_in    (phy_rerr),
 
-            .mac_rdata_out  (mac_rdata),
-            .mac_rvalid_out (mac_rvalid),
-            .mac_rready_in  (mac_rready),
-            .mac_rlast_out  (mac_rlast),
-            .mac_rtype_out  (mac_rtype),
+            .mac_tphy_clk       (phy_tx_clk),
+            .mac_tphy_data_out  (phy_txd),
+            .mac_tphy_valid_out (phy_tvalid),
+            .mac_tphy_err_out   (phy_terr),
 
-            .mac_tdata_in   (mac_tdata),
-            .mac_tvalid_in  (mac_tvalid),
-            .mac_tready_out (mac_tready),
-            .mac_tlast_in   (mac_tlast),
+            .mac_tnet_data_out  (mac_tnet_data),
+            .mac_tnet_valid_out (mac_tnet_valid),
+            .mac_tnet_ready_in  (mac_tnet_ready),
+            .mac_tnet_last_out  (mac_tnet_last),
+            .mac_tnet_type_out  (mac_tnet_type),
 
-            .phy_tx_clk     (phy_tx_clk),
-            .phy_txd_out    (phy_txd),
-            .phy_tvalid_out (phy_tvalid),
-            .phy_terr_out   (phy_terr)
+            .mac_rnet_data_in   (mac_rnet_data),
+            .mac_rnet_valid_in  (mac_rnet_valid),
+            .mac_rnet_ready_out (mac_rnet_ready),
+            .mac_rnet_last_in   (mac_rnet_last)
         );
+
 
     assign  logic_rst   =   !clk_locked;
 /*------------------------------------------------------------------------------
@@ -175,7 +176,9 @@ module eth_top #(
 ------------------------------------------------------------------------------*/
     logic   [31:0]  arp_query_ip;
     logic   [47:0]  arp_response_mac;
-    
+    logic   [31:0]  trig_arp_ip;
+    logic   [7:0]   net_rtrans_data;
+
     net_top #(
             .LOCAL_IP(LOCAL_IP),
             .LOCAL_MAC(LOCAL_MAC)
@@ -183,21 +186,27 @@ module eth_top #(
             .logic_clk              (logic_clk),
             .logic_rst              (logic_rst),
 
-            .net_rdata_in           (mac_rdata),
-            .net_rvalid_in          (mac_rvalid),
-            .net_rready_out         (mac_rready),
-            .net_rlast_in           (mac_rlast),
-            .net_rtype_in           (mac_rtype),
+            .net_rmac_data_in       (mac_tnet_data),
+            .net_rmac_valid_in      (mac_tnet_valid),
+            .net_rmac_ready_out     (mac_tnet_ready),
+            .net_rmac_last_in       (mac_tnet_last),
+            .net_rmac_type_in       (mac_tnet_type),
 
-            .net_tdata_out          (mac_tdata),
-            .net_tvalid_out         (mac_tvalid),
-            .net_tready_in          (mac_tready),
-            .net_tlast_out          (mac_tlast),
+            .net_tmac_data_out      (mac_rnet_data),
+            .net_tmac_valid_out     (mac_rnet_valid),
+            .net_tmac_ready_in      (mac_rnet_ready),
+            .net_tmac_last_out      (mac_rnet_last),
 
-            .udp_rdata_out          (udp_rdata_out),
-            .udp_rvalid_out         (udp_rvalid_out),
-            .udp_rready_in          (udp_rready_in),
-            .udp_rlast_out          (udp_rlast_out),            
+            .net_rtrans_data_in     (net_rtrans_data),
+            .net_rtrans_valid_in    (net_rtrans_valid),
+            .net_rtrans_ready_out   (net_rtrans_ready),
+            .net_rtrans_last_in     (net_rtrans_last),
+
+            .udp_rdata_out          (udp_rdata),
+            .udp_rvalid_out         (udp_rvalid),
+            .udp_rready_in          (udp_rready),
+            .udp_rlast_out          (udp_rlast),
+            .udp_rip_out            (udp_rip),
 
             .trig_arp_qvalid_in     (trig_arp_qvalid),
             .trig_arp_ip_in         (trig_arp_ip),
@@ -212,6 +221,46 @@ module eth_top #(
             .arp_response_err_out   (arp_response_err)
         );
 
+
     assign  logic_clk = clk_200m;
+
+/*------------------------------------------------------------------------------
+--  transport logic
+------------------------------------------------------------------------------*/
+    trans_top #(
+            .LOCAL_IP(LOCAL_IP),
+            .LOCAL_MAC(LOCAL_MAC),
+            .LOCAL_SP(LOCAL_SP),
+            .LOCAL_DP(LOCAL_DP)
+        ) inst_trans_top (
+            .logic_clk              (logic_clk),
+            .logic_rst              (logic_rst),
+
+            .udp_tdata_in           (udp_rdata),
+            .udp_tvalid_in          (udp_rvalid),
+            .udp_tready_out         (udp_rready),
+            .udp_tlast_in           (udp_rlast),
+            .udp_tip_in             (udp_rip),
+
+            .trans_tnet_data_out    (net_rtrans_data),
+            .trans_tnet_valid_out   (net_rtrans_valid),
+            .trans_tnet_ready_in    (net_rtrans_ready),
+            .trans_tnet_last_out    (net_rtrans_last),
+
+            .arp_query_ip_out       (arp_query_ip),
+            .arp_query_valid_out    (arp_query_valid),
+            .arp_query_ready_in     (arp_query_ready),
+
+            .arp_response_mac_in    (arp_response_mac),
+            .arp_response_valid_in  (arp_response_valid),
+            .arp_response_ready_out (arp_response_ready),
+            .arp_response_err_in    (arp_response_err),
+
+            .trig_arp_qvalid_out    (trig_arp_qvalid),
+            .trig_arp_ip_out        (trig_arp_ip),
+            .trig_arp_qready_in     (trig_arp_qready)
+        );
+
+
 
 endmodule : eth_top

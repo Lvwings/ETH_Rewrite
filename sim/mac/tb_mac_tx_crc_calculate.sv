@@ -30,43 +30,44 @@
 
     localparam PREAMBLE_REG = 64'h5555_5555_5555_55D5;
 
+
     logic       logic_clk;
     logic       logic_rst;
-    logic [7:0] mac_tdata_in;
-    logic       mac_tvalid_in;
-    logic       mac_tready_out;
-    logic       mac_tlast_in;
-    logic       phy_tx_clk;
-    logic [7:0] phy_txd_out;
-    logic       phy_tvalid_out;
-    logic       phy_terr_out;
+    logic [7:0] mac_rnet_data_in;
+    logic       mac_rnet_valid_in;
+    logic       mac_rnet_ready_out;
+    logic       mac_rnet_last_in;
+    logic       mac_tphy_clk;
+    logic [7:0] mac_tphy_data_out;
+    logic       mac_tphy_valid_out;
+    logic       mac_tphy_err_out;
 
     mac_tx_crc_calculate inst_mac_tx_crc_calculate
         (
-            .logic_clk      (logic_clk),
-            .logic_rst      (logic_rst),
-            .mac_tdata_in   (mac_tdata_in),
-            .mac_tvalid_in  (mac_tvalid_in),
-            .mac_tready_out (mac_tready_out),
-            .mac_tlast_in   (mac_tlast_in),
-            .phy_tx_clk     (phy_tx_clk),
-            .phy_txd_out    (phy_txd_out),
-            .phy_tvalid_out (phy_tvalid_out),
-            .phy_terr_out   (phy_terr_out)
+            .logic_clk          (logic_clk),
+            .logic_rst          (logic_rst),
+            .mac_rnet_data_in   (mac_rnet_data_in),
+            .mac_rnet_valid_in  (mac_rnet_valid_in),
+            .mac_rnet_ready_out (mac_rnet_ready_out),
+            .mac_rnet_last_in   (mac_rnet_last_in),
+            .mac_tphy_clk       (mac_tphy_clk),
+            .mac_tphy_data_out  (mac_tphy_data_out),
+            .mac_tphy_valid_out (mac_tphy_valid_out),
+            .mac_tphy_err_out   (mac_tphy_err_out)
         );
 
         assign  logic_clk = clk;
         assign  logic_rst = srstb;
 
     initial begin
-        phy_tx_clk = '0;
-        forever #(4) phy_tx_clk = ~phy_tx_clk;
+        mac_tphy_clk = '0;
+        forever #(4) mac_tphy_clk = ~mac_tphy_clk;
     end   
 
     task init();
-        mac_tdata_in  <= '0;
-        mac_tvalid_in <= '0;
-        mac_tlast_in  <= '0;
+        mac_rnet_data_in  <= '0;
+        mac_rnet_valid_in <= '0;
+        mac_rnet_last_in  <= '0;
     endtask
 
     initial begin
@@ -104,15 +105,15 @@
             data_cnt    <=  data_cnt;
 
         if (data_cnt >= 10 && data_cnt < 9 + DATA_LENGTH) begin
-            mac_tdata_in    <= data_ram[data_cnt + ADDR_START - 9];
-            mac_tvalid_in   <=  1;
+            mac_rnet_data_in    <= data_ram[data_cnt + ADDR_START - 9];
+            mac_rnet_valid_in   <=  1;
         end
         else begin
-            mac_tdata_in    <=  data_ram[ADDR_START];
-            mac_tvalid_in   <=  0;
+            mac_rnet_data_in    <=  data_ram[ADDR_START];
+            mac_rnet_valid_in   <=  0;
         end
 
-        mac_tlast_in    <=  (data_cnt == 8 + DATA_LENGTH);
+        mac_rnet_last_in    <=  (data_cnt == 8 + DATA_LENGTH);
     end
     
 

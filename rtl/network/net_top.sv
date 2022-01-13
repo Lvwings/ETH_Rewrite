@@ -18,23 +18,29 @@
     input           logic_rst,   
  
      //  net rx data in -> from mac
-    input   [7:0]   net_rdata_in,
-    input           net_rvalid_in,
-    output          net_rready_out,
-    input           net_rlast_in,
-    input   [2:0]   net_rtype_in,
+    input   [7:0]   net_rmac_data_in,
+    input           net_rmac_valid_in,
+    output          net_rmac_ready_out,
+    input           net_rmac_last_in,
+    input   [34:0]  net_rmac_type_in,
 
     //  net tx data out -> to mac
-    output  [7:0]   net_tdata_out,
-    output          net_tvalid_out,
-    input           net_tready_in,
-    output          net_tlast_out,   
+    output  [7:0]   net_tmac_data_out,
+    output          net_tmac_valid_out,
+    input           net_tmac_ready_in,
+    output          net_tmac_last_out,   
+
+    input  [7:0]    net_rtrans_data_in,
+    input           net_rtrans_valid_in,
+    output          net_rtrans_ready_out,
+    input           net_rtrans_last_in,    
 
     //  udp rx data out
     output  [7:0]   udp_rdata_out,
     output          udp_rvalid_out,
     input           udp_rready_in,
     output          udp_rlast_out,
+    output  [31:0]  udp_rip_out,
 
      //  arp query trigger
     input           trig_arp_qvalid_in,
@@ -62,24 +68,25 @@
             .LOCAL_IP(LOCAL_IP),
             .LOCAL_MAC(LOCAL_MAC)
         ) inst_frame_split (
-            .logic_clk      (logic_clk),
-            .logic_rst      (logic_rst),
+            .logic_clk          (logic_clk),
+            .logic_rst          (logic_rst),
 
-            .net_rdata_in   (net_rdata_in),
-            .net_rvalid_in  (net_rvalid_in),
-            .net_rready_out (net_rready_out),
-            .net_rlast_in   (net_rlast_in),
-            .net_rtype_in   (net_rtype_in),
+            .net_rmac_data_in   (net_rmac_data_in),
+            .net_rmac_valid_in  (net_rmac_valid_in),
+            .net_rmac_ready_out (net_rmac_ready_out),
+            .net_rmac_last_in   (net_rmac_last_in),
+            .net_rmac_type_in   (net_rmac_type_in),
 
-            .arp_rdata_out  (arp_rdata),
-            .arp_rvalid_out (arp_rvalid),
-            .arp_rready_in  (arp_rready),
-            .arp_rlast_out  (arp_rlast),
+            .arp_rdata_out      (arp_rdata),
+            .arp_rvalid_out     (arp_rvalid),
+            .arp_rready_in      (arp_rready),
+            .arp_rlast_out      (arp_rlast),
 
-            .udp_rdata_out  (udp_rdata_out),
-            .udp_rvalid_out (udp_rvalid_out),
-            .udp_rready_in  (udp_rready_in),
-            .udp_rlast_out  (udp_rlast_out)
+            .udp_rdata_out      (udp_rdata_out),
+            .udp_rvalid_out     (udp_rvalid_out),
+            .udp_rready_in      (udp_rready_in),
+            .udp_rlast_out      (udp_rlast_out),
+            .udp_rip_out        (udp_rip_out)
         );
 
     arp_tx #(
@@ -137,9 +144,10 @@
             .arp_response_err_out   (arp_response_err_out)
         );
 
-    assign          net_tdata_out   =   arp_tdata;
-    assign          net_tvalid_out  =   arp_tvalid;
-    assign          net_tlast_out   =   arp_tlast;
-    assign          arp_tready      =   net_tready_in;
+    assign          net_tmac_data_out       =   arp_tvalid ? arp_tdata  : net_rtrans_data_in;
+    assign          net_tmac_valid_out      =   arp_tvalid ? arp_tvalid : net_rtrans_valid_in;
+    assign          net_tmac_last_out       =   arp_tvalid ? arp_tlast  : net_rtrans_last_in;
+    assign          arp_tready              =   arp_tvalid ? net_tmac_ready_in : 0;
+    assign          net_rtrans_ready_out    =   arp_tvalid ? 0 : net_tmac_ready_in;
     
  endmodule : net_top

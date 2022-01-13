@@ -58,8 +58,8 @@
 /*------------------------------------------------------------------------------
 --  reveive state
 ------------------------------------------------------------------------------*/
-    typedef enum    logic [2:0]   {RIDLE,RECEIVE,WRITE_ADDR,WRITE_DATA,RESPONSE}    state_ar;
-    state_ar arp_rstate,arp_rnext;
+    typedef enum  {RIDLE,RECEIVE,WRITE_ADDR,WRITE_DATA,RESPONSE}    state_ar;
+    (* fsm_encoding = "one-hot" *) state_ar arp_rstate,arp_rnext;
 
     always_ff @(posedge logic_clk) begin 
         if(logic_rst) begin
@@ -118,7 +118,7 @@
                         trig_arp_qready_o <=  '0;                                                    
             end // IDEL        
             RECEIVE     :   begin
-                        arp_rready_o    <=  arp_rvalid_in;
+                        arp_rready_o    <=  1;
                         lenth_cnt       <=  lenth_cnt + (arp_rready_out & arp_rvalid_in);
 
                         case (lenth_cnt)
@@ -231,8 +231,8 @@
 /*------------------------------------------------------------------------------
 --  send state
 ------------------------------------------------------------------------------*/
-    typedef enum    logic [2:0]   {WIDLE,MASSAGE_LOAD,ARP_SEND}    state_as;
-    state_as arp_sstate,arp_snext;
+    typedef enum  {WIDLE,MASSAGE_LOAD,ARP_SEND}    state_as;
+    (* fsm_encoding = "one-hot" *) state_as arp_sstate,arp_snext;
 
     always_ff @(posedge logic_clk) begin 
         if(logic_rst) begin

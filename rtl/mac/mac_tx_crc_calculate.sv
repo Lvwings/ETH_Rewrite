@@ -3,7 +3,7 @@
  Copyright (c) 2014-2021 All rights reserved
  -----------------------------------------------------------------------------
  Author     : lwings    https://github.com/Lvwings
- File       : mac_tx_crc_calculate.sv
+ File       : mac_rnet_x_crc_calculate.sv
  Create     : 2021-12-10 16:23:56
  Revise     : 2021-12-10 16:23:56
  Language   : Verilog 2001
@@ -14,23 +14,23 @@
      input          logic_rst,      // synchronous reset active high
      
      // mac tx data in
-     input  [7:0]   mac_tdata_in,
-     input          mac_tvalid_in,
-     output         mac_tready_out,
-     input          mac_tlast_in,
+     input  [7:0]   mac_rnet_data_in,
+     input          mac_rnet_valid_in,
+     output         mac_rnet_ready_out,
+     input          mac_rnet_last_in,
 
      // phy tx interface
-     input          phy_tx_clk,
-     output [7:0]   phy_txd_out,
-     output         phy_tvalid_out,
-     output         phy_terr_out
+     input          mac_tphy_clk,
+     output [7:0]   mac_tphy_data_out,
+     output         mac_tphy_valid_out,
+     output         mac_tphy_err_out
  );
 
 /*------------------------------------------------------------------------------
 --  mac tx state 
 ------------------------------------------------------------------------------*/
-    typedef enum    logic [2:0]   {IDLE,PREAMBLE,DATA,ATUO_FILL,CRC}    state_t;
-    state_t tcrc_state,tcrc_next_state;
+    typedef enum {IDLE,PREAMBLE,DATA,PADDING,CRC}    state_t;
+    (* fsm_encoding = "one-hot" *) state_t tcrc_state,tcrc_next_state;
 
     always_ff @(posedge logic_clk) begin 
         if(logic_rst) begin
@@ -53,12 +53,12 @@
 
     always_comb begin 
         case (tcrc_state)
-            IDLE    :                                       tcrc_next_state = mac_tvalid_in       ? PREAMBLE : IDLE;
+            IDLE    :                                       tcrc_next_state = mac_rnet_valid_in   ? PREAMBLE : IDLE;
             PREAMBLE:                                       tcrc_next_state = flag_preamble_over  ? DATA : PREAMBLE;
-            DATA    : if (flag_data_over & flag_atuo_fill)  tcrc_next_state = ATUO_FILL;
+            DATA    : if (flag_data_over & flag_atuo_fill)  tcrc_next_state = PADDING;
                       else if (flag_data_over)              tcrc_next_state = CRC;
                       else                                  tcrc_next_state = DATA;
-            ATUO_FILL :                                     tcrc_next_state = flag_data_over      ? CRC : ATUO_FILL;
+            PADDING :                                       tcrc_next_state = flag_data_over      ? CRC : PADDING;
             CRC     :                                       tcrc_next_state = fifo_tlast          ? IDLE : CRC;
             default :                                       tcrc_next_state = IDLE;
         endcase
@@ -80,13 +80,13 @@
                 crc_rst   <= 1;              
             end
             DATA    :   begin
-                crc_data  <=  (mac_tvalid_in && mac_tready_out && fifo_tready) ? mac_tdata_in : fifo_tdata;
-                crc_valid <=  (mac_tvalid_in && mac_tready_out && fifo_tready);
+                crc_data  <=  (mac_rnet_valid_in && mac_rnet_ready_out && fifo_tready) ? mac_rnet_data_in : fifo_tdata;
+                crc_valid <=  (mac_rnet_valid_in && mac_rnet_ready_out && fifo_tready);
             end
-            ATUO_FILL : begin
+            PADDING : begin
                 crc_data  <=  '0;
                 crc_valid <=  fifo_tready;  
-            end // ATUO_FILL 
+            end // PADDING 
             CRC     :   begin
                 crc_data  <= 0;
                 crc_valid <= 0;                
@@ -108,7 +108,7 @@
             .LFSR_STATE_OUT_XOR (32'hFFFFFFFF),
             .REVERSE            (1),
             .DATA_WIDTH         (8)
-        ) inst_mac_tx_crc (
+        ) inst_mac_rnet_x_crc (
             .clk                   (logic_clk),
             .rst                   (crc_rst),
             .data_in               (crc_data),
@@ -122,15 +122,15 @@
 -- FIFO data generate
     - Add ETH preamble 
     - Add CRC
-    - Atuo fill frame (use 0) if PREAMBLE + eth head + data length < 68
-ETH min length = eth head(14) + data(46) + crc(4) = 64
+    - Atuo fill frame (use 0) if PREAMBLE + DATA length < 68
+ETH min length = ETH head(14) + ETH data(46) = 60
 ------------------------------------------------------------------------------*/
     localparam          PREAMBLE_REG        =   64'h5555_5555_5555_55D5;  
     localparam          MIN_BYTE_LENGTH     =   68; //  68
     localparam          MAX_BYTE_LENGTH     =   1522; //  1522
     logic   [10:0]      byte_cnt            =   '0;
     logic   [1:0]       crc_cnt             =   '0;
-    logic               mac_tready_o        =   '0;
+    logic               mac_rnet_ready_o    =   '0;
 
     always_ff @(posedge logic_clk) begin
         case (tcrc_next_state)
@@ -147,21 +147,21 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
             DATA    : begin
                 byte_cnt            <=  byte_cnt + (fifo_tvalid & fifo_tready);
 
-                mac_tready_o        <=  !mac_tlast_in && mac_tvalid_in && fifo_tready;
-                fifo_tdata          <=  (mac_tvalid_in && mac_tready_out && fifo_tready) ? mac_tdata_in : fifo_tdata;
-                fifo_tvalid         <=  (mac_tvalid_in && mac_tready_out && fifo_tready);
+                mac_rnet_ready_o    <=  !mac_rnet_last_in && mac_rnet_valid_in && fifo_tready;
+                fifo_tdata          <=  (mac_rnet_valid_in && mac_rnet_ready_out && fifo_tready) ? mac_rnet_data_in : fifo_tdata;
+                fifo_tvalid         <=  (mac_rnet_valid_in && mac_rnet_ready_out && fifo_tready);
                 flag_preamble_over  <=  0;
-                flag_data_over      <=  (mac_tlast_in && mac_tvalid_in && mac_tready_out) || (byte_cnt == MAX_BYTE_LENGTH-1);              
+                flag_data_over      <=  (mac_rnet_last_in && mac_rnet_valid_in && mac_rnet_ready_out) || (byte_cnt == MAX_BYTE_LENGTH-1);              
                 flag_atuo_fill      <=  (byte_cnt < MIN_BYTE_LENGTH-1);
             end
-            ATUO_FILL : begin
+            PADDING : begin
                 byte_cnt            <=  byte_cnt + (fifo_tvalid & fifo_tready);
 
                 fifo_tdata          <=  '0;
                 fifo_tvalid         <=  fifo_tready;
                 flag_data_over      <=  (byte_cnt == MIN_BYTE_LENGTH-1);
-                mac_tready_o        <=  0;
-            end // ATUO_FILL 
+                mac_rnet_ready_o    <=  0;
+            end // PADDING 
             CRC     : begin
                 if (fifo_tready) begin
                     crc_cnt         <=  crc_cnt + 1;
@@ -169,13 +169,13 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
                     fifo_tvalid     <=  1;
                     fifo_tlast      <=  (crc_cnt == 3);                    
                 end
-                mac_tready_o        <=  0;
+                mac_rnet_ready_o    <=  0;
                 flag_data_over      <=  0;
             end
             default : begin
                 byte_cnt           <=  '0;
                 crc_cnt            <=  '0;
-                mac_tready_o       <=  0;
+                mac_rnet_ready_o   <=  0;
                 fifo_tdata         <=  '0;
                 fifo_tvalid        <=  0;
                 fifo_tlast         <=  0;
@@ -186,35 +186,35 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
         endcase
     end
 
-    assign  mac_tready_out  =   mac_tready_o;
+    assign  mac_rnet_ready_out  =   mac_rnet_ready_o;
 
 /*------------------------------------------------------------------------------
 --  logic reset cdc
 ------------------------------------------------------------------------------*/
-    logic                 phy_tx_rst;
+    logic                 mac_tphy_rst;
 
     sync_reset #(
         .SYNC_DEPTH(3)
     ) inst_sync_reset (
-        .sys_clk      (phy_tx_clk),
+        .sys_clk      (mac_tphy_clk),
         .async_rst    (logic_rst),
-        .sync_rst_out (phy_tx_rst)
+        .sync_rst_out (mac_tphy_rst)
     );
 /*------------------------------------------------------------------------------
 --  ETH GAP
 ------------------------------------------------------------------------------*/
-    typedef enum logic [0:0]    {GIDLE,GAP_WAIT}    state_g;
-    state_g gt_state,gt_next;
+    typedef enum {GIDLE,GAP_WAIT}    state_g;
+    (* fsm_encoding = "one-hot" *) state_g gt_state,gt_next;
 
     localparam      ETH_GAP       =   16;
     logic   [7:0]   gap_cnt       =   '0;
-    logic           phy_tlast;
-    logic           phy_tvalid;
-    logic           phy_tready    =   '0;
+    logic           mac_tphy_last;
+    logic           mac_tphy_valid;
+    logic           mac_tphy_ready    =   '0;
     logic           flag_gap_over =   '0;
 
-    always_ff @(posedge phy_tx_clk) begin 
-        if(phy_tx_rst) begin
+    always_ff @(posedge mac_tphy_clk) begin 
+        if(mac_tphy_rst) begin
            gt_state  <= GIDLE;
         end else begin
            gt_state  <= gt_next;
@@ -223,35 +223,35 @@ ETH min length = eth head(14) + data(46) + crc(4) = 64
 
     always_comb begin  
         case (gt_state)
-            GIDLE   :       gt_next =   phy_tlast & phy_tvalid ? GAP_WAIT : GIDLE;
+            GIDLE   :       gt_next =   mac_tphy_last & mac_tphy_valid ? GAP_WAIT : GIDLE;
             GAP_WAIT    :   gt_next =   flag_gap_over ? GIDLE : GAP_WAIT;
             default :       gt_next =   GIDLE;
         endcase 
     end
 
-    always_ff @(posedge phy_tx_clk) begin 
+    always_ff @(posedge mac_tphy_clk) begin 
         case (gt_next)
             GIDLE   : begin
                 gap_cnt       <=  '0;
                 flag_gap_over <=  0;
-                phy_tready    <=  1;                
+                mac_tphy_ready    <=  1;                
             end // GIDLE   
             GAP_WAIT: begin
                 gap_cnt       <=  gap_cnt + 1;
                 flag_gap_over <=  (gap_cnt == ETH_GAP);
-                phy_tready    <=  0;
+                mac_tphy_ready    <=  0;
             end // GAP_WAIT   
             default : begin
                 gap_cnt       <=  '0;
                 flag_gap_over <=  0;
-                phy_tready    <=  0;
+                mac_tphy_ready    <=  0;
             end // default 
         endcase
     end
 /*------------------------------------------------------------------------------
 --  mac tx data fifo
 ------------------------------------------------------------------------------*/
-logic   [7:0]   phy_txd;
+logic   [7:0]   mac_tphy_xd;
 
  mac_tx_fifo mac_tx_fifo (
   .s_axis_aresetn   (!logic_rst),        // input wire s_axis_aresetn
@@ -262,15 +262,15 @@ logic   [7:0]   phy_txd;
   .s_axis_tdata     (fifo_tdata),       // input wire [7 : 0] s_axis_tdata
   .s_axis_tlast     (fifo_tlast),       // input wire s_axis_tlast
 
-  .m_axis_aclk      (phy_tx_clk),        // input wire m_axis_aclk
-  .m_axis_tvalid    (phy_tvalid),    // output wire m_axis_tvalid
-  .m_axis_tready    (phy_tready),        // input wire m_axis_tready
-  .m_axis_tdata     (phy_txd),       // output wire [7 : 0] m_axis_tdata
-  .m_axis_tlast     (phy_tlast)          // output wire m_axis_tlast
+  .m_axis_aclk      (mac_tphy_clk),        // input wire m_axis_aclk
+  .m_axis_tvalid    (mac_tphy_valid),    // output wire m_axis_tvalid
+  .m_axis_tready    (mac_tphy_ready),        // input wire m_axis_tready
+  .m_axis_tdata     (mac_tphy_xd),       // output wire [7 : 0] m_axis_tdata
+  .m_axis_tlast     (mac_tphy_last)          // output wire m_axis_tlast
 );
 
- assign phy_terr_out    =   0;
- assign phy_tvalid_out  =   phy_tvalid & phy_tready;
- assign phy_txd_out     =   phy_tvalid_out ? phy_txd : 0;
+ assign mac_tphy_err_out    =   0;
+ assign mac_tphy_valid_out  =   mac_tphy_valid & mac_tphy_ready;
+ assign mac_tphy_data_out   =   mac_tphy_valid_out ? mac_tphy_xd : 0;
 
  endmodule : mac_tx_crc_calculate

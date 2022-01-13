@@ -112,47 +112,60 @@ module tb_eth_top ();
     --  initial test data
     ------------------------------------------------------------------------------*/
     localparam  ARP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/mac/mac_sim_data.txt";
-    localparam  ARP_DATA_LENGTH =   72;
-
-
     localparam  UDP_FLIE_PATH   =   "D:/SourceTree/Soures/Git/sim/top/sim_udp_data.txt";
-    localparam  UDP_DATA_LENGTH =   72;
 
-    `define TEST_ARP
+    localparam  DATA_LENGTH =   72;
 
-    `ifdef TEST_UDP
-        localparam      DATA_LENGTH =   UDP_DATA_LENGTH;
-        logic   [7:0]   data_ram    [DATA_LENGTH-1 : 0];
+
+        logic   [7:0]   udp_ram    [DATA_LENGTH-1 : 0];
 
         initial begin
-            $readmemh(UDP_FLIE_PATH,data_ram);
+            $readmemh(UDP_FLIE_PATH,udp_ram);
         end        
-    `else
-        localparam      DATA_LENGTH =   ARP_DATA_LENGTH;
-        logic   [7:0]   data_ram    [DATA_LENGTH-1 : 0];
+
+        logic   [7:0]   arp_ram    [DATA_LENGTH-1 : 0];
 
         initial begin
-            $readmemh(ARP_FLIE_PATH,data_ram);
+            $readmemh(ARP_FLIE_PATH,arp_ram);
         end
-    `endif
+
 
     /*------------------------------------------------------------------------------
     --  rgmii data
     ------------------------------------------------------------------------------*/
     localparam  DATA_DELAY  = 32;
     logic [7:0] rxc_cnt     = '0;
+    logic [3:0] flag_arp    = '1;
 
     always_ff @(posedge rgmii_rxc_2x) begin 
         rxc_cnt <= rxc_cnt + 1;
+        if (rxc_cnt == 8'hFF)
+            flag_arp    <=  flag_arp << 1;
+        else
+            flag_arp    <=  flag_arp;
 
-        if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
-            rgmii_rxd_in    <= rxc_cnt[0] ? data_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : data_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];;
-            rgmii_rx_ctl_in <= 1;
-        end
+        if (flag_arp[3]) begin
+            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
+                rgmii_rxd_in    <= rxc_cnt[0] ? arp_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : arp_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];
+                rgmii_rx_ctl_in <= 1;
+            end
+            else begin
+                rgmii_rxd_in    <= 0;
+                rgmii_rx_ctl_in <= 0;            
+            end            
+        end // if (flag_arp[3])
         else begin
-            rgmii_rxd_in    <= 0;
-            rgmii_rx_ctl_in <= 0;            
+            if (rxc_cnt >= DATA_DELAY*2 && rxc_cnt < (DATA_DELAY + DATA_LENGTH)*2) begin
+                rgmii_rxd_in    <= rxc_cnt[0] ? udp_ram[rxc_cnt[7:1] - DATA_DELAY][7:4] : udp_ram[rxc_cnt[7:1] - DATA_DELAY][3:0];
+                rgmii_rx_ctl_in <= 1;
+            end
+            else begin
+                rgmii_rxd_in    <= 0;
+                rgmii_rx_ctl_in <= 0;            
+            end             
         end
+
+
     end
     
 endmodule

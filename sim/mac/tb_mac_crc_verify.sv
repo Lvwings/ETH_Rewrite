@@ -31,37 +31,42 @@
     localparam PREAMBLE = 64'h5555_5555_5555_55D5;
     localparam GOOD_CRC = 32'hFFFFFFFF;
 
-    logic       logic_clk;
-    logic       logic_rst;
-    logic       phy_rx_clk;
-    logic [7:0] phy_rxd_in;
-    logic       phy_rvalid_in;
-    logic       phy_rerr_in;
-    logic [7:0] mac_data_out;
-    logic       mac_valid_out;
-    logic       mac_ready_in;
-    logic       mac_last_out;
-    logic       mac_user_out;
+    parameter         LOCAL_IP = 32'hC0A8_006E;
+    parameter        LOCAL_MAC = 48'hABCD_1234_5678;
 
-    mac_rx_crc_verify inst_mac_crc_verify
-        (
-            .logic_clk     (logic_clk),
-            .logic_rst     (logic_rst),
-            .phy_rx_clk    (phy_rx_clk),
-            .phy_rxd_in    (phy_rxd_in),
-            .phy_rvalid_in (phy_rvalid_in),
-            .phy_rerr_in   (phy_rerr_in),
-            .mac_data_out  (mac_data_out),
-            .mac_valid_out (mac_valid_out),
-            .mac_ready_in  (mac_ready_in),
-            .mac_last_out  (mac_last_out),
-            .mac_user_out  (mac_user_out)
+    logic        logic_clk;
+    logic        logic_rst;
+    logic        mac_rphy_clk;
+    logic  [7:0] mac_rphy_data_in;
+    logic        mac_rphy_valid_in;
+    logic        mac_rphy_err_in;
+    logic  [7:0] mac_tnet_data_out;
+    logic        mac_tnet_valid_out;
+    logic        mac_tnet_ready_in;
+    logic        mac_tnet_last_out;
+    logic [34:0] mac_tnet_type_out;
+
+    mac_rx_crc_verify #(
+            .LOCAL_IP(LOCAL_IP),
+            .LOCAL_MAC(LOCAL_MAC)
+        ) inst_mac_rx_crc_verify (
+            .logic_clk          (logic_clk),
+            .logic_rst          (logic_rst),
+            .mac_rphy_clk       (mac_rphy_clk),
+            .mac_rphy_data_in   (mac_rphy_data_in),
+            .mac_rphy_valid_in  (mac_rphy_valid_in),
+            .mac_rphy_err_in    (mac_rphy_err_in),
+            .mac_tnet_data_out  (mac_tnet_data_out),
+            .mac_tnet_valid_out (mac_tnet_valid_out),
+            .mac_tnet_ready_in  (mac_tnet_ready_in),
+            .mac_tnet_last_out  (mac_tnet_last_out),
+            .mac_tnet_type_out  (mac_tnet_type_out)
         );
 
     task init();
-        phy_rxd_in    <= '0;
-        phy_rvalid_in <= '0;
-        phy_rerr_in   <= '0;
+        mac_rphy_data_in    <= '0;
+        mac_rphy_valid_in <= '0;
+        mac_rphy_err_in   <= '0;
         mac_ready_in  <= '1;
     endtask
 
@@ -69,8 +74,8 @@
     assign  logic_rst = srstb;
 
      initial begin
-        phy_rx_clk = '0;
-        forever #(4) phy_rx_clk = ~phy_rx_clk;
+        mac_rphy_clk = '0;
+        forever #(4) mac_rphy_clk = ~mac_rphy_clk;
     end   
 
     initial begin
@@ -94,20 +99,20 @@
     --  phy data
     ------------------------------------------------------------------------------*/
     reg [6:0]   data_cnt    =   '0;
-    reg [0:0]   phy_rx_rst  =   '1;
+    reg [0:0]   mac_rphy_rst  =   '1;
 
 
-    always_ff @(posedge phy_rx_clk or posedge logic_rst) begin
+    always_ff @(posedge mac_rphy_clk or posedge logic_rst) begin
         if(logic_rst) begin
-            phy_rx_rst <= 1;
+            mac_rphy_rst <= 1;
         end else begin
-            phy_rx_rst <= 0;
+            mac_rphy_rst <= 0;
         end
     end
 
     reg [1:0]   rx_cnt  =   '0;
-    always_ff @(posedge phy_rx_clk) begin 
-        if(phy_rx_rst) begin
+    always_ff @(posedge mac_rphy_clk) begin 
+        if(mac_rphy_rst) begin
             data_cnt <= 0;
         end else begin
             if (data_cnt == 90)
@@ -116,17 +121,17 @@
                 data_cnt <= data_cnt + 1;
 
             if (data_cnt >= 10 && data_cnt < 10 + DATA_LENGTH) begin
-                phy_rxd_in      <=  data_ram[data_cnt - 10];
-                phy_rvalid_in   <=  1;
+                mac_rphy_data_in      <=  data_ram[data_cnt - 10];
+                mac_rphy_valid_in   <=  1;
             end
             else begin
-                phy_rxd_in      <=  8'hDD;
-                phy_rvalid_in   <=  0;
+                mac_rphy_data_in      <=  8'hDD;
+                mac_rphy_valid_in   <=  0;
             end
 
             rx_cnt  <=  rx_cnt + (data_cnt == 90);
 
-            phy_rerr_in <= (data_cnt == 50) && (rx_cnt == 1);
+            mac_rphy_err_in <= (data_cnt == 50) && (rx_cnt == 1);
         end
     end
 

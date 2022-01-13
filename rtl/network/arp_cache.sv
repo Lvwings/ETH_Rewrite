@@ -62,14 +62,15 @@
  --  write & read pointer
      to reduce memory space, use lfsr(CRC-6/ITU) to generate pointer as memory address.
  ------------------------------------------------------------------------------*/
+    logic   [CACHE_ADDR_WIDTH-1 : 0]    write_pointer_c;
+    logic   [CACHE_ADDR_WIDTH-1 : 0]    read_pointer_c;
     logic   [CACHE_ADDR_WIDTH-1 : 0]    write_pointer;
     logic   [CACHE_ADDR_WIDTH-1 : 0]    read_pointer;
-
 /*------------------------------------------------------------------------------
 --  write arp cache
 ------------------------------------------------------------------------------*/
-    typedef enum    logic [2:0]   {WIDLE,WRITE_ADDR,WRITE_DATA,RESPONSE,WCLEAR}    state_w;
-    state_w write_state,write_next;
+    typedef enum {WIDLE,WRITE_ADDR,WRITE_DATA,RESPONSE,WCLEAR}    state_w;
+    (* fsm_encoding = "one-hot" *) state_w write_state,write_next;
 
     always_ff @(posedge logic_clk) begin
         if(logic_rst) begin
@@ -128,8 +129,9 @@
     
     //  memory store
     always_ff @(posedge logic_clk) begin 
+
         if (arp_write_ready_out && arp_write_valid_in) begin
-            arp_ip_mem[write_pointer]   <=  arp_write_ip_in;
+            arp_ip_mem[write_pointer_c] <=  arp_write_ip_in;
         end
 
         if (arp_store_ready_out && arp_store_valid_in) begin
@@ -138,7 +140,8 @@
 
         case (write_next)
             WRITE_DATA  :   begin
-                        arp_mark_mem[write_pointer] <=  1;
+                        if (arp_write_ready_out && arp_write_valid_in)
+                            arp_mark_mem[write_pointer_c] <=  1;
             end // WRITE_ADDR
 
             WCLEAR      :   begin
@@ -170,8 +173,8 @@
             .data_in             (arp_write_ip_in),
             .data_valid_in       (arp_write_ready_out),
             .data_out            (),
-            .lfsr_state_out_comb (write_pointer),
-            .lfsr_state_out_reg  ()
+            .lfsr_state_out_comb (write_pointer_c),
+            .lfsr_state_out_reg  (write_pointer)
         );
 
     assign  arp_write_ready_out =   arp_write_ready_o;
@@ -181,8 +184,8 @@
 /*------------------------------------------------------------------------------
 --  read arp cache
 ------------------------------------------------------------------------------*/
-    typedef enum    logic [1:0]   {RIDLE,READ_ADDR,READ_DATA,RCLEAR_HOLD}    state_r;
-    state_r read_state,read_next;
+    typedef enum {RIDLE,READ_ADDR,READ_DATA,RCLEAR_HOLD}    state_r;
+    (* fsm_encoding = "one-hot" *) state_r read_state,read_next;
 
     always_ff @(posedge logic_clk) begin 
         if(logic_rst) begin
@@ -197,6 +200,8 @@
     logic   [47:0]  arp_response_mac_o  =   '0;
     logic           lfsr_rrst           =   '0;
     logic           arp_response_err_o  =   '0;
+    logic   [31:0]  arp_query_ip        =   '0;
+    logic           flag_read_judge     =   '0;
 
     always_comb begin
         case (read_state)
@@ -220,8 +225,10 @@
 
             READ_DATA   : begin
                     arp_query_ready_o    <=  0;
-                    arp_response_valid_o <=  1;
-                    arp_response_mac_o   <=  arp_mac_mem[read_pointer];
+                    arp_response_valid_o <=  flag_read_judge;
+
+                    if (flag_read_judge)
+                        arp_response_mac_o   <=  arp_mac_mem[read_pointer];
             end // READ_DATA   
             default :   begin
                     arp_query_ready_o    <=  0;
@@ -233,18 +240,22 @@
     
     //  read judge
     always_ff @(posedge logic_clk) begin
-        lfsr_rrst   <=  arp_response_ready_in && arp_response_valid_out;
+        lfsr_rrst       <=  arp_response_ready_in && arp_response_valid_out;
+        arp_query_ip    <=  (arp_query_valid_in && arp_query_ready_out) ? arp_query_ip_in : arp_query_ip;
 
-        if (arp_query_valid_in && arp_query_ready_out)
-            // check if mac has been stored
-            if ((arp_query_ip_in == arp_ip_mem[read_pointer]) && arp_mark_mem[read_pointer])
-                arp_response_err_o <=  0;
-            else
-                arp_response_err_o <=  1;
-        else if (arp_response_ready_in && arp_response_valid_out)
-            arp_response_err_o     <=  0;
-        else
-            arp_response_err_o     <=  arp_response_err_o;
+        case (read_next)
+            READ_DATA   : begin
+                flag_read_judge     <=  1;
+                if (flag_read_judge) begin
+                    // check if mac has been stored
+                    arp_response_err_o  <=  !((arp_query_ip == arp_ip_mem[read_pointer]) && arp_mark_mem[read_pointer]);                    
+                end
+            end // READ_DATA   
+            default : begin
+                arp_response_err_o  <=  0;
+                flag_read_judge     <=  0;
+            end // default 
+        endcase
     end
 
     //  CRC-6/ITU    
@@ -263,8 +274,8 @@
             .data_in             (arp_query_ip_in),
             .data_valid_in       (arp_query_ready_out),
             .data_out            (),
-            .lfsr_state_out_comb (read_pointer),
-            .lfsr_state_out_reg  ()
+            .lfsr_state_out_comb (read_pointer_c),
+            .lfsr_state_out_reg  (read_pointer)
         );     
 
     assign  arp_query_ready_out     =   arp_query_ready_o;
