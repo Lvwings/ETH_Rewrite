@@ -79,10 +79,15 @@
 
     logic           flag_rerr   =   '0;
     logic           flag_rover  =   '0;
+    logic           flag_rstart =   '0;
 
+    always_ff @(posedge logic_clk) begin 
+        flag_rstart <= arp_rvalid_in;
+    end
+              
     always_comb begin 
         case (arp_rstate)                  
-            RIDLE    :      if (arp_rvalid_in)                          arp_rnext    =   RECEIVE;
+            RIDLE    :      if (flag_rstart)                            arp_rnext    =   RECEIVE;
                             else                                        arp_rnext    =   RIDLE;
         
             RECEIVE :       if      (flag_rerr)                         arp_rnext    =   RIDLE;
@@ -100,7 +105,7 @@
 /*------------------------------------------------------------------------------
 --  receive arp data 
 ------------------------------------------------------------------------------*/
-    logic           arp_rready_o        =   '0;
+    logic           arp_rready_o        =   '1;
     logic           trig_arp_qready_o   =   '0;
     logic   [7:0]   lenth_cnt           =   '0;
 
@@ -112,45 +117,13 @@
                         sa_ip             <=  '0;
                         da_ip             <=  '0;  
                         lenth_cnt         <=  '0;
-                        arp_rready_o      <=  '0; 
                         flag_rerr         <=  '0; 
                         flag_rover        <=  '0;
                         trig_arp_qready_o <=  '0;                                                    
             end // IDEL        
             RECEIVE     :   begin
-                        arp_rready_o    <=  1;
-                        lenth_cnt       <=  lenth_cnt + (arp_rready_out & arp_rvalid_in);
-
-                        case (lenth_cnt)
-                            8'd06   : opcode[15:08] <=  arp_rdata_in;
-                            8'd07   : opcode[07:00] <=  arp_rdata_in;
-                             // source mac
-                            8'd08   : sa_mac[47:40] <= arp_rdata_in; 
-                            8'd09   : sa_mac[39:32] <= arp_rdata_in; 
-                            8'd10   : sa_mac[31:24] <= arp_rdata_in; 
-                            8'd11   : sa_mac[23:16] <= arp_rdata_in; 
-                            8'd12   : sa_mac[15:08] <= arp_rdata_in; 
-                            8'd13   : sa_mac[07:00] <= arp_rdata_in;                 
-                            // source ip
-                            8'd14   : sa_ip[31:24]  <= arp_rdata_in; 
-                            8'd15   : sa_ip[23:16]  <= arp_rdata_in; 
-                            8'd16   : sa_ip[15:08]  <= arp_rdata_in; 
-                            8'd17   : sa_ip[07:00]  <= arp_rdata_in; 
-                            // target ip   
-                            8'd24   : da_ip[31:24]  <= arp_rdata_in; 
-                            8'd25   : da_ip[23:16]  <= arp_rdata_in; 
-                            8'd26   : da_ip[15:08]  <= arp_rdata_in; 
-                            8'd27   : da_ip[07:00]  <= arp_rdata_in;                                                        
-                            default : begin
-                                      opcode    <=  opcode;
-                                      sa_mac    <=  sa_mac;
-                                      sa_ip     <=  sa_ip;
-                                      da_ip     <=  da_ip;
-                            end
-                        endcase
-
                         //  only response to local ip
-                        if (lenth_cnt == ARP_LENGTH) begin
+                        if (lenth_cnt == ARP_LENGTH+1) begin
                             flag_rover            <=  1;
                             if (opcode == OPCODE_QUERY && da_ip == LOCAL_IP)
                                 flag_rerr         <=  0;
@@ -164,9 +137,38 @@
                         else begin
                             flag_rerr             <=  flag_rerr;
                             flag_rover            <=  flag_rover;
-                            trig_arp_qready_o     <=  0;                           
-                        end
-                            
+                            trig_arp_qready_o     <=  0;   
+
+                            lenth_cnt       <=  lenth_cnt + 1;
+
+                            case (lenth_cnt)
+                                8'd06   : opcode[15:08] <=  arp_rdata_in;
+                                8'd07   : opcode[07:00] <=  arp_rdata_in;
+                                 // source mac
+                                8'd08   : sa_mac[47:40] <= arp_rdata_in; 
+                                8'd09   : sa_mac[39:32] <= arp_rdata_in; 
+                                8'd10   : sa_mac[31:24] <= arp_rdata_in; 
+                                8'd11   : sa_mac[23:16] <= arp_rdata_in; 
+                                8'd12   : sa_mac[15:08] <= arp_rdata_in; 
+                                8'd13   : sa_mac[07:00] <= arp_rdata_in;                 
+                                // source ip
+                                8'd14   : sa_ip[31:24]  <= arp_rdata_in; 
+                                8'd15   : sa_ip[23:16]  <= arp_rdata_in; 
+                                8'd16   : sa_ip[15:08]  <= arp_rdata_in; 
+                                8'd17   : sa_ip[07:00]  <= arp_rdata_in; 
+                                // target ip   
+                                8'd24   : da_ip[31:24]  <= arp_rdata_in; 
+                                8'd25   : da_ip[23:16]  <= arp_rdata_in; 
+                                8'd26   : da_ip[15:08]  <= arp_rdata_in; 
+                                8'd27   : da_ip[07:00]  <= arp_rdata_in;                                                        
+                                default : begin
+                                          opcode    <=  opcode;
+                                          sa_mac    <=  sa_mac;
+                                          sa_ip     <=  sa_ip;
+                                          da_ip     <=  da_ip;
+                                end
+                            endcase                                                    
+                        end                            
             end // RECEIVE 
             default : begin
                         opcode            <=  opcode;
@@ -174,7 +176,6 @@
                         sa_ip             <=  sa_ip;
                         da_ip             <=  da_ip;  
                         lenth_cnt         <=  '0;
-                        arp_rready_o      <=  '0; 
                         flag_rerr         <=  '0;
                         flag_rover        <=  '0; 
                         trig_arp_qready_o <=  '0;            

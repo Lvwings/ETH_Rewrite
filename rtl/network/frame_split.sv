@@ -87,7 +87,7 @@
     always_ff @(posedge logic_clk) begin 
        case (split_next)
             ARP_DATA    :   begin
-                        net_rmac_ready_o    <=  net_rmac_valid_in & !net_rmac_last_in;                
+                        net_rmac_ready_o    <=  net_rmac_valid_in & arp_rready_in & !net_rmac_last_in;                
             end // ARP_DATA   
 
             UDP_DATA    :  begin

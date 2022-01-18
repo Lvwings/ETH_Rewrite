@@ -12,23 +12,43 @@
 
 module eth_top #(
         //  xilinx family : Virtex-5, Virtex-6, 7-Series, Ultrascale, Spartan-6 or lower vision
-        parameter   XILINX_FAMILY   = "7-series",
+        parameter   XILINX_FAMILY       = "7-series",
         // XILINX IODDR style ("IODDR", "IODDR2")
         // Use IODDR for Virtex-4, Virtex-5, Virtex-6, 7 Series, Ultrascale
         // Use IODDR2 for Spartan-6 or lower vision
-        parameter IODDR_STYLE       = "IODDR", 
+        parameter IODDR_STYLE           = "IODDR", 
         // Clock input style ("BUFG", "BUFR", "BUFIO")
         // Use BUFR for Virtex-6, 7-series
         // Use BUFG for Virtex-5, Spartan-6, Ultrascale
-        parameter CLOCK_INPUT_STYLE = "BUFR",
+        parameter CLOCK_INPUT_STYLE     = "BUFR",
         // IDELAY tap option : ("Training","Fixed")  
         // Use Training to find the range of valid tap
         // Use Fixed to fix the tap
-        parameter IDELAY_TAP_OPTION = "Fixed" ,
-        parameter LOCAL_IP          =   32'hC0A8_006E,
-        parameter LOCAL_MAC         =   48'h00D0_0800_0002,
-        parameter LOCAL_SP          =   16'd8080,
-        parameter LOCAL_DP          =   16'd8080                          
+        parameter IDELAY_TAP_OPTION     = "Fixed" ,
+        parameter LOCAL_IP              =   32'hC0A8_006E,
+        parameter LOCAL_MAC             =   48'h00D0_0800_0002,
+        parameter LOCAL_SP              =   16'd8080,
+        parameter LOCAL_DP              =   16'd8080,
+        //  FIFO parameter   
+        parameter FIFO_DEPTH            =   512,                    //  Range: 16 - 4194304. Default value = 2048.   
+        parameter FIFO_MEMORY_TYPE      =   "auto",                 //  auto, block, distributed, ultra. Default value = auto
+        parameter FIFO_PACKET           =   "true",                 //  false, true. Default value = false.
+    
+        parameter TDATA_WIDTH           =   8,                      //  Range: 8 - 2048. Default value = 32.  
+                                                                    //  NOTE: The maximum FIFO size (width x depth) is limited to 150-Megabits.                                                                 
+    
+        parameter USE_ADV_FEATURES      =   "0000",                 //  Setting USE_ADV_FEATURES[1] to 1 enables prog_full flag; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[2] to 1 enables wr_data_count; Default value of this bit is 0           
+                                                                    //  Setting USE_ADV_FEATURES[3] to 1 enables almost_full flag; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[9] to 1 enables prog_empty flag; Default value of this bit is 0     
+                                                                    //  Setting USE_ADV_FEATURES[10] to 1 enables rd_data_count; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[11] to 1 enables almost_empty flag; Default value of this bit is 0    
+        parameter PROG_EMPTY_THRESH     =   10,                     //  Range: 5 - 4194301. Default value = 10. 
+        parameter PROG_FULL_THRESH      =   10,                     //  Range: 5 - 4194301. Default value = 10. 
+        parameter WR_DATA_COUNT_WIDTH   =   1,                      //  Range: 1 - 23. Default value = 1.      
+        parameter RD_DATA_COUNT_WIDTH   =   1,                      //  Range: 1 - 23. Default value = 1.
+        parameter ECC_MODE              =   "no_ecc",               //  no_ecc, en_ecc. Default value = no_ecc.  
+        parameter CDC_SYNC_STAGES       =   2                       //  Range: 2 - 8. Default value = 2.                                   
     )                                                   
     (
         input               extern_clk_in,          // Clock
@@ -142,7 +162,24 @@ module eth_top #(
     logic   [7:0]   mac_rnet_data;
 
     mac_top #(
-            .LOCAL_MAC(LOCAL_MAC)
+            .LOCAL_IP(LOCAL_IP),
+            .LOCAL_MAC(LOCAL_MAC),
+            .CLOCKING_MODE("independent_clock"),
+            .RELATED_CLOCKS(0),
+            .FIFO_DEPTH(FIFO_DEPTH),
+            .FIFO_MEMORY_TYPE(FIFO_MEMORY_TYPE),
+            .FIFO_PACKET(FIFO_PACKET),
+            .TDATA_WIDTH(TDATA_WIDTH),
+            .TDEST_WIDTH(1),
+            .TID_WIDTH(1),
+            .TUSER_WIDTH(35),
+            .USE_ADV_FEATURES(USE_ADV_FEATURES),
+            .PROG_EMPTY_THRESH(PROG_EMPTY_THRESH),
+            .PROG_FULL_THRESH(PROG_FULL_THRESH),
+            .WR_DATA_COUNT_WIDTH(WR_DATA_COUNT_WIDTH),
+            .RD_DATA_COUNT_WIDTH(RD_DATA_COUNT_WIDTH),
+            .ECC_MODE(ECC_MODE),
+            .CDC_SYNC_STAGES(CDC_SYNC_STAGES)
         ) inst_mac_top (
             .logic_clk          (logic_clk),
             .logic_rst          (logic_rst),
@@ -168,7 +205,6 @@ module eth_top #(
             .mac_rnet_ready_out (mac_rnet_ready),
             .mac_rnet_last_in   (mac_rnet_last)
         );
-
 
     assign  logic_rst   =   !clk_locked;
 /*------------------------------------------------------------------------------
@@ -227,11 +263,28 @@ module eth_top #(
 /*------------------------------------------------------------------------------
 --  transport logic
 ------------------------------------------------------------------------------*/
+
     trans_top #(
             .LOCAL_IP(LOCAL_IP),
             .LOCAL_MAC(LOCAL_MAC),
             .LOCAL_SP(LOCAL_SP),
-            .LOCAL_DP(LOCAL_DP)
+            .LOCAL_DP(LOCAL_DP),
+            .CLOCKING_MODE("common_clock"),
+            .RELATED_CLOCKS(0),
+            .FIFO_DEPTH(FIFO_DEPTH),
+            .FIFO_MEMORY_TYPE(FIFO_MEMORY_TYPE),
+            .FIFO_PACKET(FIFO_PACKET),
+            .TDATA_WIDTH(TDATA_WIDTH),
+            .TDEST_WIDTH(1),
+            .TID_WIDTH(1),
+            .TUSER_WIDTH(1),
+            .USE_ADV_FEATURES(USE_ADV_FEATURES),
+            .PROG_EMPTY_THRESH(PROG_EMPTY_THRESH),
+            .PROG_FULL_THRESH(PROG_FULL_THRESH),
+            .WR_DATA_COUNT_WIDTH(WR_DATA_COUNT_WIDTH),
+            .RD_DATA_COUNT_WIDTH(RD_DATA_COUNT_WIDTH),
+            .ECC_MODE(ECC_MODE),
+            .CDC_SYNC_STAGES(CDC_SYNC_STAGES)
         ) inst_trans_top (
             .logic_clk              (logic_clk),
             .logic_rst              (logic_rst),
@@ -260,7 +313,6 @@ module eth_top #(
             .trig_arp_ip_out        (trig_arp_ip),
             .trig_arp_qready_in     (trig_arp_qready)
         );
-
 
 
 endmodule : eth_top

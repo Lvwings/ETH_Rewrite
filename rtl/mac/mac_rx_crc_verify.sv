@@ -15,7 +15,7 @@
     //  FIFO parameter   
     parameter       CLOCKING_MODE       =   "independent_clock",    //  common_clock, independent_clock   
     parameter       RELATED_CLOCKS      =   0,                      //  Specifies if the s_aclk and m_aclk are related having the same source but different clock ratios.  
-    parameter       FIFO_DEPTH          =   16,                    //  Range: 16 - 4194304. Default value = 2048.   
+    parameter       FIFO_DEPTH          =   512,                    //  Range: 16 - 4194304. Default value = 2048.   
     parameter       FIFO_MEMORY_TYPE    =   "auto",                 //  auto, block, distributed, ultra. Default value = auto
     parameter       FIFO_PACKET         =   "true",                 //  false, true. Default value = false.
 
@@ -490,23 +490,23 @@
         mac_tnet_last   <=  (rcrc_state == UDP_DATA && length_cnt == udp_data_length) || (crc_last && !mac_tnet_type[1]);   
     end    
 
- mac_rx_fifo mac_rx_fifo (
-  .s_axis_aresetn   (fifo_reset_n),         // input wire s_axis_aresetn
-
-  .s_axis_aclk      (mac_rphy_clk),         // input wire s_axis_aclk
-  .s_axis_tvalid    (mac_tnet_valid),        // input wire s_axis_tvalid
-  .s_axis_tready    (),                     // output wire s_axis_tready
-  .s_axis_tdata     (mac_tnet_data),         // input wire [7 : 0] s_axis_tdata
-  .s_axis_tlast     (mac_tnet_last),         // input wire s_axis_tlast
-  .s_axis_tuser     (mac_tnet_type),        // input wire [34 : 0] s_axis_tuser
-
-  .m_axis_aclk      (logic_clk),                // input wire m_axis_aclk
-  .m_axis_tvalid    (mac_tnet_valid_out),    // output wire m_axis_tvalid
-  .m_axis_tready    (mac_tnet_ready_in),     // input wire m_axis_tready
-  .m_axis_tdata     (mac_tnet_data_out),     // output wire [7 : 0] m_axis_tdata
-  .m_axis_tlast     (mac_tnet_last_out),      // output wire m_axis_tlast
-  .m_axis_tuser     (mac_tnet_type_out)      // output wire [34 : 0] m_axis_tuser
-);  
+// mac_rx_fifo mac_rx_fifo (
+//  .s_axis_aresetn   (fifo_reset_n),         // input wire s_axis_aresetn
+//
+//  .s_axis_aclk      (mac_rphy_clk),         // input wire s_axis_aclk
+//  .s_axis_tvalid    (mac_tnet_valid),        // input wire s_axis_tvalid
+//  .s_axis_tready    (),                     // output wire s_axis_tready
+//  .s_axis_tdata     (mac_tnet_data),         // input wire [7 : 0] s_axis_tdata
+//  .s_axis_tlast     (mac_tnet_last),         // input wire s_axis_tlast
+//  .s_axis_tuser     (mac_tnet_type),        // input wire [34 : 0] s_axis_tuser
+//
+//  .m_axis_aclk      (logic_clk),                // input wire m_axis_aclk
+//  .m_axis_tvalid    (mac_tnet_valid_out),    // output wire m_axis_tvalid
+//  .m_axis_tready    (mac_tnet_ready_in),     // input wire m_axis_tready
+//  .m_axis_tdata     (mac_tnet_data_out),     // output wire [7 : 0] m_axis_tdata
+//  .m_axis_tlast     (mac_tnet_last_out),      // output wire m_axis_tlast
+//  .m_axis_tuser     (mac_tnet_type_out)      // output wire [34 : 0] m_axis_tuser
+//);  
 
 
    xpm_fifo_axis #(
@@ -530,7 +530,7 @@
         .ECC_MODE               (ECC_MODE),             // String      
         .SIM_ASSERT_CHK         (0)                     // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
    )
-   mac_rx_fifo2 (
+   mac_rx_fifo (
     //  axis slave
         .s_aclk         (mac_rphy_clk),                        
         .s_aresetn      (fifo_reset_n),                 
@@ -542,34 +542,10 @@
 
     //  axis master    
         .m_aclk         (logic_clk),                                                                      
-        .m_axis_tdata   (),           
-        .m_axis_tvalid  (),
+        .m_axis_tdata   (mac_tnet_data_out),           
+        .m_axis_tvalid  (mac_tnet_valid_out),
         .m_axis_tready  (mac_tnet_ready_in), 
-        .m_axis_tlast   (), 
-        .m_axis_tuser   (),
-
-    //  full and empty flag
-        .almost_empty_axis(almost_empty_axis),     
-        .almost_full_axis(almost_full_axis),
-        .prog_empty_axis(prog_empty_axis),      
-        .prog_full_axis(prog_full_axis),  
-    //  data counter
-        .rd_data_count_axis(rd_data_count_axis),
-        .wr_data_count_axis(wr_data_count_axis),                                               
-    //  axis slave support
-        .s_axis_tdest(s_axis_tdest),            
-        .s_axis_tid(s_axis_tid),                                                            
-        .s_axis_tkeep(s_axis_tkeep),                              
-        .s_axis_tstrb(s_axis_tstrb), 
-    //  axis master support    
-        .m_axis_tdest(m_axis_tdest),            
-        .m_axis_tid(m_axis_tid),                
-        .m_axis_tkeep(m_axis_tkeep),                             
-        .m_axis_tstrb(m_axis_tstrb),             
-    //  ecc    
-        .dbiterr_axis(dbiterr_axis),                                          
-        .sbiterr_axis(sbiterr_axis),                                                            
-        .injectdbiterr_axis(injectdbiterr_axis),                                            
-        .injectsbiterr_axis(injectsbiterr_axis) 
+        .m_axis_tlast   (mac_tnet_last_out), 
+        .m_axis_tuser   (mac_tnet_type_out)
    );   
  endmodule : mac_rx_crc_verify

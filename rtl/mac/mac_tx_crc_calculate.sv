@@ -9,7 +9,34 @@
  Language   : Verilog 2001
  -----------------------------------------------------------------------------*/
 
- module mac_tx_crc_calculate (
+ module mac_tx_crc_calculate #(
+    //  FIFO parameter   
+    parameter       CLOCKING_MODE       =   "independent_clock",    //  common_clock, independent_clock   
+    parameter       RELATED_CLOCKS      =   0,                      //  Specifies if the s_aclk and m_aclk are related having the same source but different clock ratios.  
+    parameter       FIFO_DEPTH          =   512,                    //  Range: 16 - 4194304. Default value = 2048.   
+    parameter       FIFO_MEMORY_TYPE    =   "auto",                 //  auto, block, distributed, ultra. Default value = auto
+    parameter       FIFO_PACKET         =   "true",                 //  false, true. Default value = false.
+
+    parameter       TDATA_WIDTH         =   8,                      //  Range: 8 - 2048. Default value = 32.  
+                                                                    //  NOTE: The maximum FIFO size (width x depth) is limited to 150-Megabits. 
+    parameter       TDEST_WIDTH         =   1,                      //  Range: 1 - 32. Default value = 1.    
+    parameter       TID_WIDTH           =   1,                      //  Range: 1 - 32. Default value = 1. 
+    parameter       TUSER_WIDTH         =   1,                      //  Range: 1 - 4086. Default value = 1.                                                                 
+
+    parameter       USE_ADV_FEATURES    =   "0000",                 //  Setting USE_ADV_FEATURES[1] to 1 enables prog_full flag; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[2] to 1 enables wr_data_count; Default value of this bit is 0           
+                                                                    //  Setting USE_ADV_FEATURES[3] to 1 enables almost_full flag; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[9] to 1 enables prog_empty flag; Default value of this bit is 0     
+                                                                    //  Setting USE_ADV_FEATURES[10] to 1 enables rd_data_count; Default value of this bit is 0    
+                                                                    //  Setting USE_ADV_FEATURES[11] to 1 enables almost_empty flag; Default value of this bit is 0    
+    parameter       PROG_EMPTY_THRESH   =   10,                     //  Range: 5 - 4194301. Default value = 10. 
+    parameter       PROG_FULL_THRESH    =   10,                     //  Range: 5 - 4194301. Default value = 10. 
+    parameter       WR_DATA_COUNT_WIDTH =   1,                      //  Range: 1 - 23. Default value = 1.      
+    parameter       RD_DATA_COUNT_WIDTH =   1,                      //  Range: 1 - 23. Default value = 1.
+    parameter       ECC_MODE            =   "no_ecc",               //  no_ecc, en_ecc. Default value = no_ecc.  
+    parameter       CDC_SYNC_STAGES     =   2                       //  Range: 2 - 8. Default value = 2.     
+    )
+    (
      input          logic_clk,      // Clock
      input          logic_rst,      // synchronous reset active high
      
@@ -251,26 +278,68 @@ ETH min length = ETH head(14) + ETH data(46) = 60
 /*------------------------------------------------------------------------------
 --  mac tx data fifo
 ------------------------------------------------------------------------------*/
-logic   [7:0]   mac_tphy_xd;
+logic   [7:0]   mac_tphy_data;
 
- mac_tx_fifo mac_tx_fifo (
-  .s_axis_aresetn   (!logic_rst),        // input wire s_axis_aresetn
-  .s_axis_aclk      (logic_clk),        // input wire s_axis_aclk
+// mac_tx_fifo mac_tx_fifo (
+//  .s_axis_aresetn   (!logic_rst),        // input wire s_axis_aresetn
+//  .s_axis_aclk      (logic_clk),        // input wire s_axis_aclk
+//
+//  .s_axis_tvalid    (fifo_tvalid),      // input wire s_axis_tvalid
+//  .s_axis_tready    (fifo_tready),      // output wire s_axis_tready
+//  .s_axis_tdata     (fifo_tdata),       // input wire [7 : 0] s_axis_tdata
+//  .s_axis_tlast     (fifo_tlast),       // input wire s_axis_tlast
+//
+//  .m_axis_aclk      (mac_tphy_clk),        // input wire m_axis_aclk
+//  .m_axis_tvalid    (mac_tphy_valid),    // output wire m_axis_tvalid
+//  .m_axis_tready    (mac_tphy_ready),        // input wire m_axis_tready
+//  .m_axis_tdata     (mac_tphy_data),       // output wire [7 : 0] m_axis_tdata
+//  .m_axis_tlast     (mac_tphy_last)          // output wire m_axis_tlast
+//);
 
-  .s_axis_tvalid    (fifo_tvalid),      // input wire s_axis_tvalid
-  .s_axis_tready    (fifo_tready),      // output wire s_axis_tready
-  .s_axis_tdata     (fifo_tdata),       // input wire [7 : 0] s_axis_tdata
-  .s_axis_tlast     (fifo_tlast),       // input wire s_axis_tlast
 
-  .m_axis_aclk      (mac_tphy_clk),        // input wire m_axis_aclk
-  .m_axis_tvalid    (mac_tphy_valid),    // output wire m_axis_tvalid
-  .m_axis_tready    (mac_tphy_ready),        // input wire m_axis_tready
-  .m_axis_tdata     (mac_tphy_xd),       // output wire [7 : 0] m_axis_tdata
-  .m_axis_tlast     (mac_tphy_last)          // output wire m_axis_tlast
-);
+
+    xpm_fifo_axis #(
+        .CLOCKING_MODE          (CLOCKING_MODE),        // String
+        .RELATED_CLOCKS         (RELATED_CLOCKS),       // DECIMAL
+        .FIFO_DEPTH             (FIFO_DEPTH),           // DECIMAL
+        .FIFO_MEMORY_TYPE       (FIFO_MEMORY_TYPE),     // String
+        .PACKET_FIFO            (FIFO_PACKET),          // String
+
+        .TDATA_WIDTH            (TDATA_WIDTH),          // DECIMAL
+        .TDEST_WIDTH            (TDEST_WIDTH),          // DECIMAL
+        .TID_WIDTH              (TID_WIDTH),            // DECIMAL
+        .TUSER_WIDTH            (TUSER_WIDTH),          // DECIMAL
+
+        .USE_ADV_FEATURES       (USE_ADV_FEATURES),     // String
+        .PROG_EMPTY_THRESH      (PROG_EMPTY_THRESH),    // DECIMAL
+        .PROG_FULL_THRESH       (PROG_FULL_THRESH),     // DECIMAL
+        .WR_DATA_COUNT_WIDTH    (WR_DATA_COUNT_WIDTH),  // DECIMAL
+        .RD_DATA_COUNT_WIDTH    (RD_DATA_COUNT_WIDTH),  // DECIMAL
+        .CDC_SYNC_STAGES        (CDC_SYNC_STAGES),      // DECIMAL     
+        .ECC_MODE               (ECC_MODE),             // String      
+        .SIM_ASSERT_CHK         (0)                     // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
+   )
+   mac_tx_fifo (
+    //  axis slave
+        .s_aclk         (logic_clk),                        
+        .s_aresetn      (!logic_rst),                 
+        .s_axis_tdata   (fifo_tdata), 
+        .s_axis_tvalid  (fifo_tvalid), 
+        .s_axis_tready  (fifo_tready), 
+        .s_axis_tlast   (fifo_tlast),
+        .s_axis_tuser   (), 
+
+    //  axis master    
+        .m_aclk         (mac_tphy_clk),                                                                      
+        .m_axis_tdata   (mac_tphy_data),           
+        .m_axis_tvalid  (mac_tphy_valid),
+        .m_axis_tready  (mac_tphy_ready), 
+        .m_axis_tlast   (mac_tphy_last), 
+        .m_axis_tuser   ()
+   );     
 
  assign mac_tphy_err_out    =   0;
  assign mac_tphy_valid_out  =   mac_tphy_valid & mac_tphy_ready;
- assign mac_tphy_data_out   =   mac_tphy_valid_out ? mac_tphy_xd : 0;
+ assign mac_tphy_data_out   =   mac_tphy_valid_out ? mac_tphy_data : 0;
 
  endmodule : mac_tx_crc_calculate

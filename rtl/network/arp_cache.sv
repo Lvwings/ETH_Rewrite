@@ -57,7 +57,6 @@
             arp_mac_mem[i]  =   '0;
         end
     end
- 
  /*------------------------------------------------------------------------------
  --  write & read pointer
      to reduce memory space, use lfsr(CRC-6/ITU) to generate pointer as memory address.
