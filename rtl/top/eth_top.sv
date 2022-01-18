@@ -12,7 +12,7 @@
 
 module eth_top #(
         //  xilinx family : Virtex-5, Virtex-6, 7-Series, Ultrascale, Spartan-6 or lower vision
-        parameter   XILINX_FAMILY       = "7-series",
+        parameter XILINX_FAMILY       = "7-series",
         // XILINX IODDR style ("IODDR", "IODDR2")
         // Use IODDR for Virtex-4, Virtex-5, Virtex-6, 7 Series, Ultrascale
         // Use IODDR2 for Spartan-6 or lower vision
@@ -30,7 +30,7 @@ module eth_top #(
         parameter LOCAL_SP              =   16'd8080,
         parameter LOCAL_DP              =   16'd8080,
         //  FIFO parameter   
-        parameter FIFO_DEPTH            =   512,                    //  Range: 16 - 4194304. Default value = 2048.   
+        parameter FIFO_DEPTH            =   1024,                    //  Range: 16 - 4194304. Default value = 2048. Real data depth is FIFO_DEPTH-(54*8/TDATA_WIDTH) (deduct udp protocol occupied space)
         parameter FIFO_MEMORY_TYPE      =   "auto",                 //  auto, block, distributed, ultra. Default value = auto
         parameter FIFO_PACKET           =   "true",                 //  false, true. Default value = false.
     
@@ -51,10 +51,14 @@ module eth_top #(
         parameter CDC_SYNC_STAGES       =   2                       //  Range: 2 - 8. Default value = 2.                                   
     )                                                   
     (
-        input               extern_clk_in,          // Clock
-        input               extern_rstn_in,         // Asynchronous reset active low
-    
-        output              rgmii_clk_out,
+        input               logic_clk,          // Clock
+        input               logic_rst,          // synchronous reset active high
+
+        input               clk_200m,           //  idelay reference clock
+        input               clk_125m,           //  rgmii tx reference clock 
+        input               clk_125m90,         //  rgmii tx reference clock
+        input               rgmii_clk_in,       //  mido reference clock 25 MHz     
+        output              rgmii_clk_out,      //  phy support clock 25 MHz  (option)
     // The following ports are the RGMII physical interface: these will be at pins on the FPGA
         input   [3:0]       rgmii_rxd_in,          
         input               rgmii_rxc_in,
@@ -72,7 +76,6 @@ module eth_top #(
 
 );
 
-        logic              clk_locked;
 
         logic              phy_tx_clk;
         logic  [7:0]       phy_txd;
@@ -91,24 +94,6 @@ module eth_top #(
         logic              udp_rlast;
         logic  [31:0]      udp_rip;
 
-       
-/*------------------------------------------------------------------------------
---  clock generate
-------------------------------------------------------------------------------*/
-
-  clk_wiz_0 clk_grt
-   (
-    // Clock out ports
-    .clk_125m(clk_125m),     // output clk_125m
-    .clk_125m90(clk_125m90),     // output clk_125m90
-    .clk_200m(clk_200m),     // output clk_200m
-    .clk_25m(rgmii_clk_out),     // output clk_25m
-    // Status and control signals
-    .reset(!extern_rstn_in), // input reset
-    .locked(clk_locked),       // output locked
-   // Clock in ports
-    .clk_in(extern_clk_in));      // input clk_in
-
 /*------------------------------------------------------------------------------
 --  phy logic
 ------------------------------------------------------------------------------*/   
@@ -120,7 +105,7 @@ module eth_top #(
             .IDELAY_TAP_OPTION(IDELAY_TAP_OPTION)
         ) inst_phy_top (
             .clk_200m         (clk_200m),
-            .sys_rst          (sys_rst),
+            .sys_rst          (logic_rst),
 
             .rgmii_rxd_in     (rgmii_rxd_in),
             .rgmii_rxc_in     (rgmii_rxc_in),
@@ -151,8 +136,7 @@ module eth_top #(
 
     assign  phy_tx_clk      = clk_125m;
     assign  phy_tx_clk90    = clk_125m90;
-    assign  rgmii_clk_in    = rgmii_clk_out;
-    assign  sys_rst         = !clk_locked;
+    assign  rgmii_clk_out   = rgmii_clk_in;
 
 /*------------------------------------------------------------------------------
 --  mac logic
@@ -206,7 +190,6 @@ module eth_top #(
             .mac_rnet_last_in   (mac_rnet_last)
         );
 
-    assign  logic_rst   =   !clk_locked;
 /*------------------------------------------------------------------------------
 --  network logic
 ------------------------------------------------------------------------------*/
@@ -256,9 +239,6 @@ module eth_top #(
             .arp_response_ready_in  (arp_response_ready),
             .arp_response_err_out   (arp_response_err)
         );
-
-
-    assign  logic_clk = clk_200m;
 
 /*------------------------------------------------------------------------------
 --  transport logic
@@ -313,6 +293,5 @@ module eth_top #(
             .trig_arp_ip_out        (trig_arp_ip),
             .trig_arp_qready_in     (trig_arp_qready)
         );
-
 
 endmodule : eth_top
